@@ -2,20 +2,20 @@ import bpy
 import math
 import random
 
-# Create and subdivide a plane
-def create_target_object(name, subdivisions, dimensions=(2, 2, 0), location=(0, 0, 0)):
-    bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=False, location=location)
-    target_object = bpy.context.object # The object becomes active
-    target_object.name = name
-    target_object.dimensions = dimensions
-    
-    # Create fragments
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.subdivide(number_cuts=subdivisions)
-    bpy.ops.object.mode_set(mode='OBJECT')
-    
-    bpy.ops.object.shade_smooth()
-    return target_object
+# # Create and subdivide a plane
+# def create_target_object(name, subdivisions, dimensions=(2, 2, 0), location=(0, 0, 0)):
+#     bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=False, location=location)
+#     target_object = bpy.context.object # The object becomes active
+#     target_object.name = name
+#     target_object.dimensions = dimensions
+#     
+#     # Create fragments
+#     bpy.ops.object.mode_set(mode='EDIT')
+#     bpy.ops.mesh.subdivide(number_cuts=subdivisions)
+#     bpy.ops.object.mode_set(mode='OBJECT')
+#     
+#     bpy.ops.object.shade_smooth()
+#     return target_object
 
 # Add physics modifiers (physics of the target object)
 def set_target_object_modifiers(obj, mass=0.005, quality=5):
