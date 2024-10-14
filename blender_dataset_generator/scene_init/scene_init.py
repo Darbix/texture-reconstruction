@@ -29,8 +29,8 @@ def set_target_object_modifiers(obj, mass=0.005, quality=5):
     
 
 # Create a background object with collision physics
-def create_background_object(name, dimensions=(5, 5, 0.2), location=(0, 0, -0.1)):
-    bpy.ops.mesh.primitive_cube_add(size=1, enter_editmode=False, location=location)
+def create_background_object(name, dimensions=(5, 5, 0), location=(0, 0, 0)):
+    bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=False, location=location)
     background_object = bpy.context.object
     background_object.name = name
     background_object.dimensions = dimensions
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     set_target_object_modifiers(target_object, mass=0.005, quality=5)
     
     # Background object
-    background_object = create_background_object("Background_object", dimensions=(5, 5, 0.2), location=(0, 0, -0.1))
+    background_object = create_background_object("Background_object", dimensions=(5, 5, 0), location=(0, 0, 0))
     set_background_object_modifiers(background_object)
     
     # Camera

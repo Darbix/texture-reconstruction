@@ -36,15 +36,14 @@ renders_dir = abs_curr_dir + '/camera_images'
 surfaces_dir = abs_curr_dir + '/surface_images'
 
 
-def initialize_scene():
+def initialize_scene(surface_size):
     # Delete all objects
     scene_init.delete_all_objects()
     
     # Background object
-    height = 0.2
-    size = 8
+    size = surface_size # Size in meters
     background_object = scene_init.create_background_object(SURFACE_OBJECT,
-        dimensions=(size, size, height), location=(0, 0, -height / 2))
+        dimensions=(size, size, 0), location=(0, 0, 0))
     scene_init.set_background_object_modifiers(background_object)
     
     # Camera
@@ -88,7 +87,7 @@ def set_uv_map_texture(plane_obj, image):
     links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
 
     # Assign the material to the plane object
-    plane_obj.data.materials.clear()  # Clear existing materials
+    plane_obj.data.materials.clear()
     plane_obj.data.materials.append(material)
 
     # Create UV map if it doesn't exist
@@ -150,7 +149,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         RES_X = 1920                # Render resolution X
         RES_Y = 1080                # Render resolution Y
-        RES_COEF = 0.01             # Resolution reduction (normalized num of rays to render)
+        RES_COEF = 0.05             # Resolution reduction (normalized num of rays to render)
         
         # ----- Crumpled plane constants -----
         CRUMPLED_PLANE_CUTS = 2           # Subdivision cuts
@@ -200,7 +199,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         }
         
         # ----- Camera constants -----
-        distance = 6 # [m] from the target object
+        distance = 6.5 # [m] from the target object
         d = distance / math.sqrt(2)
         # The distance from the texture center is approximately 6m
         camera_views = [
@@ -319,7 +318,6 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     # Cast the rays from the camera to the target object's texture 
                     cast_rays(render_path.rsplit('.', 1)[0] + '.txt',
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, visualize=False)
-                    
                 
                 # Remove created objects
                 for light_object in light_objects:
@@ -331,13 +329,13 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
 
 
 if __name__ == "__main__":
-    initialize_scene()
+    initialize_scene(surface_size=9)
     
     if not os.path.exists(renders_dir):
         os.makedirs(renders_dir)
     
     # Set random seed
-    # random.seed(9)
+    random.seed(9)
     
     num_images = 2
     generate_data(textures_dir, renders_dir, surfaces_dir,

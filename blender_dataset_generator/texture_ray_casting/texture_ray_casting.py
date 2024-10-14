@@ -5,50 +5,83 @@ import bmesh
 import os
 
 
-def convert_local_to_texture(obj, local_coords):
-    """Converts local coordinates local_coords of object obj to UV texture coordinates"""
-    # Ensure the object is a mesh and is in the correct context
-    if obj.type != 'MESH':
-        print("The object must be a mesh")
-        return None
-
-    # Access the mesh data (dependency graph) in its current evaluated state
+def convert_world_to_texture(obj, face_index, local_coords):
+    """
+    Converts world coordinates of object 'obj' to UV texture coordinates for the specified face.
+    Weightens UV face by local_coords position in the vertex face square.  
+    """
+    
+    # Access the mesh data in its current evaluated state
     depsgraph = bpy.context.evaluated_depsgraph_get()
     evaluated_obj = obj.evaluated_get(depsgraph)
-    # Get the deformed mesh data
+
+    # Get the deformed mesh data and the active UV layer
     mesh = evaluated_obj.data
-
     uv_layer = mesh.uv_layers.active.data
-    closest_face_index = -1
-    closest_distance = float('inf')
 
-    # Transform local coordinates to world coordinates
-    world_coords = obj.matrix_world @ local_coords
+    # Retrieve the polygon corresponding to the given face index
+    closest_poly = mesh.polygons[face_index]
+    loop_indices = closest_poly.loop_indices
 
-    # Iterate through all the polygons to find the closest face
-    for poly in mesh.polygons:
-        # Calculate the polygon's world-space center (average of polygon's vertices)
-        world_vertices = (evaluated_obj.matrix_world @ mesh.vertices[vert].co for vert in poly.vertices)
-        world_center = sum(world_vertices, Vector()) / len(poly.vertices)
+    # Get the UV coordinates and vertex positions for the specified polygon (quad)
+    uv_coords = [uv_layer[loop_idx].uv for loop_idx in loop_indices]
+    vertex_positions = [mesh.vertices[vert_idx].co for vert_idx in closest_poly.vertices]
 
-        # Calculate the distance to the world coordinate
-        distance = (world_coords - world_center).length
+
+    def get_uv_from_triangle(v0, v1, v2, uv0, uv1, uv2, n='1'):
+        """Calculates UV coordinates from local coordinates using barycentric interpolation."""
         
-        if distance < closest_distance:
-            closest_distance = distance
-            closest_face_index = poly.index
+        # Vectors for the triangle
+        v0_v1 = v1 - v0
+        v0_v2 = v2 - v0
+        v0_p = local_coords - v0
+        
+        # Compute dot products
+        d00 = v0_v1.dot(v0_v1)
+        d01 = v0_v1.dot(v0_v2)
+        d11 = v0_v2.dot(v0_v2)
+        d20 = v0_p.dot(v0_v1)
+        d21 = v0_p.dot(v0_v2)
 
-    # If a closest face is found, retrieve its UV coordinates
-    if closest_face_index != -1:
-        closest_poly = mesh.polygons[closest_face_index]
-        
-        # Collect UV coordinates for the closest face
-        uv_coords = [uv_layer[loop_index].uv for loop_index in closest_poly.loop_indices]
-        
-        if uv_coords:
-            # Return the average UV coordinate of the face
-            return sum(uv_coords, Vector((0.0, 0.0))) / len(uv_coords)
-    return None
+        # Calculate the denominator
+        denom = d00 * d11 - d01 * d01
+        if denom == 0:
+            return None  # Collinear points
+
+        # Compute barycentric coordinates
+        v = (d11 * d20 - d01 * d21) / denom
+        w = (d00 * d21 - d01 * d20) / denom
+        u = 1 - v - w
+
+        # Check if the local coordinates are within the triangle
+        if 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 and u + v <= 1.0:
+            return (u * uv0 + v * uv1 + w * uv2)
+
+        def is_almost_zero(value, epsilon=1e-5):
+            return abs(value) < epsilon
+
+        # TODO Second chance
+        if(is_almost_zero(u) or is_almost_zero(v) or is_almost_zero(w)):
+            dp = 4
+            u = round(u, dp)
+            v = round(v, dp)
+            w = round(w, dp)
+            if 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 and u + v <= 1.0:
+                return (u * uv0 + v * uv1 + w * uv2)
+
+        return None  # Outside the triangle
+
+
+    # Split the quad into two triangles and check each for UV coordinates
+    uv1 = get_uv_from_triangle(vertex_positions[0], vertex_positions[1], vertex_positions[2],
+                                uv_coords[0], uv_coords[1], uv_coords[2])
+    if uv1 is not None:
+        return uv1  # Return UV coordinates from the first triangle if found
+    
+    # Check the second triangle formed by the quad
+    uv2 = get_uv_from_triangle(vertex_positions[0], vertex_positions[2], vertex_positions[3],
+                                 uv_coords[0], uv_coords[2], uv_coords[3], '2')
+    return uv2
 
 
 def draw_point_in_local_space(target_object, location):
@@ -141,21 +174,21 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
             direction = (destination - origin).normalized()
             
             # Ray casting (in the target object space)
-            hit, location, norm, face =  target_object.ray_cast(origin, direction)
+            hit, location, norm, face_index =  target_object.ray_cast(origin, direction)
             
             if hit:
-                # Store world space hits for ray visualization
-                values[ix,iy] = (matrix_world @ location)
-
-                # Normalized local space coordinates of the target object hit point
-                # "1 -" inverts coordinates so that the 0,0 is top left not bottom left
-                # texture_coords = (location[0] + 0.5,
-                #                  1.0 - (location[1] + 0.5)) #  "1 -" to invert y=0 to the top left
-                
                 # Normalized texture coordinates (averaged by polygon vertices)
-                texture_coords = convert_local_to_texture(target_object, location)
+                texture_coords = convert_world_to_texture(target_object, face_index, location)
+                # TODO
+                if(texture_coords is None):
+                    continue
+
+                # Store world space hits for ray visualization
+                world_coords = (matrix_world @ location)
+                values[ix,iy] = world_coords
+
                 # Remove '1 -' to shift 0,0 from the top left to the bottom left
-                texture_coords = (texture_coords[0], 1 - texture_coords[1])
+                texture_coords = (texture_coords[0], 1 - texture_coords[1]) # #  "1 -" to invert y=0 to the top left
 
                 # Normalized coordinates on the rendered camera image
                 cam_x = ray_rel_x + 0.5
