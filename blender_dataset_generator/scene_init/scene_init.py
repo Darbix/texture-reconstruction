@@ -2,20 +2,38 @@ import bpy
 import math
 import random
 
-# # Create and subdivide a plane
-# def create_target_object(name, subdivisions, dimensions=(2, 2, 0), location=(0, 0, 0)):
-#     bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=False, location=location)
-#     target_object = bpy.context.object # The object becomes active
-#     target_object.name = name
-#     target_object.dimensions = dimensions
-#     
-#     # Create fragments
-#     bpy.ops.object.mode_set(mode='EDIT')
-#     bpy.ops.mesh.subdivide(number_cuts=subdivisions)
-#     bpy.ops.object.mode_set(mode='OBJECT')
-#     
-#     bpy.ops.object.shade_smooth()
-#     return target_object
+
+def set_uv_map_texture(plane_obj, image):
+    # Create a new material and enable nodes
+    material = bpy.data.materials.new(name="ImageMaterial")
+    material.use_nodes = True
+
+    # Clear default nodes and create necessary nodes
+    nodes = material.node_tree.nodes
+    nodes.clear()
+    texture_node = nodes.new(type='ShaderNodeTexImage')
+    texture_node.image = image
+    bsdf_node = nodes.new(type='ShaderNodeBsdfPrincipled')
+    output_node = nodes.new(type='ShaderNodeOutputMaterial')
+
+    # Link nodes
+    links = material.node_tree.links
+    links.new(texture_node.outputs['Color'], bsdf_node.inputs['Base Color'])
+    links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
+
+    # Assign the material to the plane object
+    plane_obj.data.materials.clear()
+    plane_obj.data.materials.append(material)
+
+    # Create UV map if it doesn't exist
+    if not plane_obj.data.uv_layers:
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.uv.unwrap(method='ANGLE_BASED', margin=0.00)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Set texture to UV map (if needed, currently unused)
+    uv_map = plane_obj.data.uv_layers.active
+
 
 # Add physics modifiers (physics of the target object)
 def set_target_object_modifiers(obj, mass=0.005, quality=5):

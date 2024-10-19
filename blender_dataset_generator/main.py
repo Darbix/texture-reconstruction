@@ -3,7 +3,10 @@ import sys
 import random
 import bpy
 import math
+import bmesh
 import importlib
+import mathutils
+import numpy as np
 
 def force_reload_module(module_name, path):
     sys.path.insert(0, path)  # Add the path to the module
@@ -49,9 +52,9 @@ def initialize_scene(surface_size):
     # Camera
     scene_init.create_camera(name=MAIN_CAMERA, location=(0.0, -5.0, 5.0),
         rotation_deg=(45, 0, 0))
-    
 
-def cast_rays(file_path, res_x=1920, res_y=1080, visualize=False, res_coef=1.0):
+
+def cast_rays(file_path_name, res_x=1920, res_y=1080, visualize=False, res_coef=1.0):
     # Target object with the texture
     target_object = bpy.data.objects[TARGET_OBJECT]
 
@@ -61,43 +64,17 @@ def cast_rays(file_path, res_x=1920, res_y=1080, visualize=False, res_coef=1.0):
     texture_ray_casting.set_render_resolution(res_x, res_y)
     
     # Cast rays from the camera to the texture for res_coef * <n_pixels> rays
-    outputs = texture_ray_casting.cast_rays_to_texture(cam, target_object,
+    outputs, z_vals = texture_ray_casting.cast_rays_to_texture(cam, target_object,
         res_coef=res_coef, visualize=visualize)
- 
-    if(file_path):
-        texture_ray_casting.export_outputs(file_path, outputs)
-
-
-def set_uv_map_texture(plane_obj, image):
-    # Create a new material and enable nodes
-    material = bpy.data.materials.new(name="ImageMaterial")
-    material.use_nodes = True
-
-    # Clear default nodes and create necessary nodes
-    nodes = material.node_tree.nodes
-    nodes.clear()
-    texture_node = nodes.new(type='ShaderNodeTexImage')
-    texture_node.image = image
-    bsdf_node = nodes.new(type='ShaderNodeBsdfPrincipled')
-    output_node = nodes.new(type='ShaderNodeOutputMaterial')
-
-    # Link nodes
-    links = material.node_tree.links
-    links.new(texture_node.outputs['Color'], bsdf_node.inputs['Base Color'])
-    links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
-
-    # Assign the material to the plane object
-    plane_obj.data.materials.clear()
-    plane_obj.data.materials.append(material)
-
-    # Create UV map if it doesn't exist
-    if not plane_obj.data.uv_layers:
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.uv.unwrap(method='ANGLE_BASED', margin=0.00)
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-    # Set texture to UV map (if needed, currently unused)
-    uv_map = plane_obj.data.uv_layers.active
+    
+    # If file path to the general name is set, save data
+    if(file_path_name):
+        # Save UV map image
+        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef, file_path_name + '_uv.png')
+        # Save Z-buffer image
+        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef, file_path_name + '_z.png')
+        # Save the render image
+        texture_ray_casting.export_outputs(file_path_name + '.txt', outputs)
 
 
 def setup_collision_removal_handler(obj, removal_frame, hide, last_frame):
@@ -149,11 +126,11 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         RES_X = 1920                # Render resolution X
         RES_Y = 1080                # Render resolution Y
-        RES_COEF = 0.05             # Resolution reduction (normalized num of rays to render)
+        RES_COEF = 0.15             # Resolution reduction (normalized num of rays to render)
         
         # ----- Crumpled plane constants -----
-        CRUMPLED_PLANE_CUTS = 2           # Subdivision cuts
-        CRUMPLE_FACTOR = 0.3              # How strong (high) the peaks are
+        CRUMPLED_PLANE_CUTS = 3           # Subdivision cuts
+        CRUMPLE_FACTOR = 0.40             # How strong (high) the peaks are
         REDUCTION_RANGE = (0.95, 1.25)    # Percentual reduction compared to the texture
         
         # ----- Target object constants -----
@@ -192,14 +169,14 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'HUE': (0.0, 0.4),
             'SATURATION': (0.0, 1.0),
             'VALUE': (0.5, 1.0),
-            'POWER': (500, 1300),
+            'POWER': (450, 1300),
             'x': (-4.0, 4.0),
             'y': (-4.0, 4.0),
-            'z': (1.0, 7.0)
+            'z': (2.0, 7.0)
         }
         
         # ----- Camera constants -----
-        distance = 6.5 # [m] from the target object
+        distance = 7 # [m] from the target object
         d = distance / math.sqrt(2)
         # The distance from the texture center is approximately 6m
         camera_views = [
@@ -251,14 +228,19 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     location=(0, 0, CRUMPLE_FACTOR + HEIGHT_ABOVE_CRUMPLED))
                 data_generation.add_physics(target_name, physics_props)
                 nodes_target, texture_node_target = data_generation.set_material_nodes(target_object, 'Target_texture_material')
-                # Apply the texture to the target object
                 
                 # Set the target object texture
-                # texture_node_target.image = loaded_texture
-                set_uv_map_texture(target_object, loaded_texture)
+                scene_init.set_uv_map_texture(target_object, loaded_texture)
                 
                 # Adjust the material properties
                 data_generation.adjust_material(nodes_target, texture_material_props)
+                
+                # Poke square faces to 4 triangles each
+                bpy.ops.object.mode_set(mode='EDIT')
+                bm = bmesh.from_edit_mesh(target_object.data)
+                bmesh.ops.poke(bm, faces=bm.faces)
+                bmesh.update_edit_mesh(target_object.data)
+                bpy.ops.object.mode_set(mode='OBJECT')
                 
                 
                 # ----- Crumpled plane settings -----
@@ -272,13 +254,13 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 
                 # ----- Surface settings -----
                 # Random surface texture select (the list is shuffled)
-                surface_name = surface_names.pop()
+                surface_name = surface_names.pop(0)
                 surface_names.append(surface_name)
                 data_generation.adjust_surface(nodes_surface, surface_material_props)
                 
                 surface_path = os.path.join(surfaces_dir, surface_name)
                 texture_node_surface.image = bpy.data.images.load(surface_path)
-
+                
                 
                 # ----- Light settings -----
                 light_objects = []
@@ -316,7 +298,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     data_generation.render_view(render_path)    
                     
                     # Cast the rays from the camera to the target object's texture 
-                    cast_rays(render_path.rsplit('.', 1)[0] + '.txt',
+                    cast_rays(render_path.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, visualize=False)
                 
                 # Remove created objects
@@ -335,9 +317,8 @@ if __name__ == "__main__":
         os.makedirs(renders_dir)
     
     # Set random seed
-    random.seed(9)
+    random.seed(27)
     
     num_images = 2
     generate_data(textures_dir, renders_dir, surfaces_dir,
              MAIN_CAMERA, TARGET_OBJECT, SURFACE_OBJECT, num_images)
-

@@ -5,12 +5,11 @@ import bmesh
 import os
 
 
-def convert_world_to_texture(obj, face_index, local_coords):
+def convert_local_to_texture(obj, face_index, local_coords):
     """
-    Converts world coordinates of object 'obj' to UV texture coordinates for the specified face.
+    Converts local object's coordinates to UV texture coordinates for the specified face.
     Weightens UV face by local_coords position in the vertex face square.  
     """
-    
     # Access the mesh data in its current evaluated state
     depsgraph = bpy.context.evaluated_depsgraph_get()
     evaluated_obj = obj.evaluated_get(depsgraph)
@@ -28,7 +27,7 @@ def convert_world_to_texture(obj, face_index, local_coords):
     vertex_positions = [mesh.vertices[vert_idx].co for vert_idx in closest_poly.vertices]
 
 
-    def get_uv_from_triangle(v0, v1, v2, uv0, uv1, uv2, n='1'):
+    def get_uv_from_triangle(v0, v1, v2, uv0, uv1, uv2):
         """Calculates UV coordinates from local coordinates using barycentric interpolation."""
         
         # Vectors for the triangle
@@ -57,31 +56,18 @@ def convert_world_to_texture(obj, face_index, local_coords):
         if 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 and u + v <= 1.0:
             return (u * uv0 + v * uv1 + w * uv2)
 
-        def is_almost_zero(value, epsilon=1e-5):
-            return abs(value) < epsilon
+        # Limit the values to not return None (the point must be in the face triangle anyway) 
+        v = max(0.0, min(1.0, v))
+        w = max(0.0, min(1.0, w))
+        u = max(0.0, min(1.0, u))
 
-        # TODO Second chance
-        if(is_almost_zero(u) or is_almost_zero(v) or is_almost_zero(w)):
-            dp = 4
-            u = round(u, dp)
-            v = round(v, dp)
-            w = round(w, dp)
-            if 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 and u + v <= 1.0:
-                return (u * uv0 + v * uv1 + w * uv2)
-
-        return None  # Outside the triangle
+        return u * uv0 + v * uv1 + w * uv2
 
 
-    # Split the quad into two triangles and check each for UV coordinates
-    uv1 = get_uv_from_triangle(vertex_positions[0], vertex_positions[1], vertex_positions[2],
+    # Calculate the UV point in the triangle face
+    uv = get_uv_from_triangle(vertex_positions[0], vertex_positions[1], vertex_positions[2],
                                 uv_coords[0], uv_coords[1], uv_coords[2])
-    if uv1 is not None:
-        return uv1  # Return UV coordinates from the first triangle if found
-    
-    # Check the second triangle formed by the quad
-    uv2 = get_uv_from_triangle(vertex_positions[0], vertex_positions[2], vertex_positions[3],
-                                 uv_coords[0], uv_coords[2], uv_coords[3], '2')
-    return uv2
+    return uv
 
 
 def draw_point_in_local_space(target_object, location):
@@ -119,7 +105,8 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
         res_coef: Resolution coeficient 0.0 to 1.0.
             Number of rays will be res_coef * resolution_x * resolution_y
     Return:
-        outputs: Normalized camera pixels mapped to texture normalized coordinates
+        outputs: 2D array of tuples with normalized camera pixels 
+            mapped to texture coords (cam_x, cam_y, uv_x, uv_y)
     """
     # Save the current view mode
     mode = bpy.context.area.type
@@ -149,11 +136,13 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
     # 2D array of mappings camera-pixel to texture-pixel
     values = np.empty((ray_range_x.size, ray_range_y.size), dtype=object)
     outputs = np.empty((ray_range_x.size, ray_range_y.size), dtype=object)
+    z_vals = np.empty((ray_range_x.size, ray_range_y.size), dtype=object)
 
     for ix, _ in enumerate(ray_range_x):
         for iy, _ in enumerate(ray_range_y):
             values[ix, iy] = None
             outputs[ix, iy] = None
+            z_vals[ix, iy] = None
             
     # Target object local space to world space matrix
     matrix_world = target_object.matrix_world
@@ -178,17 +167,16 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
             
             if hit:
                 # Normalized texture coordinates (averaged by polygon vertices)
-                texture_coords = convert_world_to_texture(target_object, face_index, location)
-                # TODO
-                if(texture_coords is None):
-                    continue
+                texture_coords = convert_local_to_texture(target_object, face_index, location)
+                # if(texture_coords is None):
+                #     continue
 
                 # Store world space hits for ray visualization
                 world_coords = (matrix_world @ location)
                 values[ix,iy] = world_coords
 
                 # Remove '1 -' to shift 0,0 from the top left to the bottom left
-                texture_coords = (texture_coords[0], 1 - texture_coords[1]) # #  "1 -" to invert y=0 to the top left
+                texture_coords = (texture_coords[0], 1 - texture_coords[1])
 
                 # Normalized coordinates on the rendered camera image
                 cam_x = ray_rel_x + 0.5
@@ -196,6 +184,9 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
                 cam_y = (1 - ((ray_rel_y * (cam_res_x / cam_res_y)) + 0.5))
                 
                 outputs[ix,iy] = (cam_x, cam_y, *texture_coords)
+
+                # Z-buffer values
+                z_vals[ix,iy] = (location - pixel_vector).length
     
     if(visualize):
         # Draw points
@@ -210,7 +201,7 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
     # Reset a view mode
     bpy.context.area.type = mode
     
-    return outputs
+    return outputs, z_vals
 
 
 def export_outputs(file_path, outputs):
@@ -268,7 +259,80 @@ def set_render_resolution(rx, ry):
     # Keep render at 100% of the specified resolution
     bpy.context.scene.render.resolution_percentage = 100
 
+
+def upsample_ray_data(data_matrix, res_x, res_y, res_coef):
+    """numpy array as input TODO"""
+    # Convert z_vals to a numpy array for easier manipulation
+    w, h = data_matrix.shape
+
+    # Precompute the indices map (upsample the ray grid to the render resolution)
+    x_indices = np.clip((np.arange(res_x) * res_coef).astype(int), 0, w - 1)
+    y_indices = h - 1 - np.clip((np.arange(res_y) * res_coef).astype(int), 0, h - 1)
+
+    # Create a grid of y indices for all x at once
+    # Repeats the indexing (substitutes loops over all rows and columns)
+    y_indices_grid = np.tile(y_indices, (res_x, 1)).T
+    x_indices_grid = np.tile(x_indices, (res_y, 1))
+
+    # Retrieve z_values for all pixels at once (2D dimension of res_x*res_y)
+    upsampled_data_matrix = data_matrix[x_indices_grid, y_indices_grid]
     
+    return upsampled_data_matrix
+
+
+def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path):
+    # Convert the ray data array to upsampled render size array
+    coords_data = np.array(coords_matrix, dtype=object)
+    upsampled_data = upsample_ray_data(coords_data, res_x, res_y, res_coef)
+
+    pixels = np.zeros((res_y, res_x, 4), dtype=np.float32)
+
+    # Mask for valid not None values
+    mask = np.array([[v is not None for v in y] for y in upsampled_data])
+
+    # Extract valid values where the mask is True
+    # RGB
+    pixels[mask, 0] = np.array([[v[2] if v is not None else 0 for v in y] for y in upsampled_data])[mask]
+    pixels[mask, 1] = np.array([[v[3] if v is not None else 0 for v in y] for y in upsampled_data])[mask]
+    # Alpha
+    pixels[mask, 3] = 1.0
+
+    # Create and save the image
+    image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True)
+    image.pixels = pixels.ravel()
+    image.filepath_raw = file_path
+    image.file_format = 'PNG'
+    image.save()
+
+
+def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path):
+
+    data_matrix = np.array(z_vals_matrix, dtype=float)
+
+    z_values = upsample_ray_data(data_matrix, res_x, res_y, res_coef)
+
+    # Find the max value in the array, ignoring None
+    max_z_value = np.nanmax(data_matrix)
+
+    # Normalize the non-NaN values (NaN stay NaN)
+    normalized_values = np.clip(z_values / max_z_value, 0.0, 1.0)
+
+    # Create pixel array and fill with normalized RGB values
+    pixels = np.zeros((res_y, res_x, 4), dtype=np.float32)
+    # RGB
+    pixels[:, :, :3] = normalized_values[:, :, np.newaxis]
+    # Alpha
+    pixels[:, :, 3] = 1.0
+    pixels[np.isnan(z_values)] = 0.0  # Where NaN
+
+    # Create an image for the map
+    image = bpy.data.images.new("", width=res_x, height=res_y, alpha=True)
+    image.pixels = pixels.ravel()
+    image.filepath_raw = file_path
+    image.file_format = 'PNG'
+    image.save()
+
+
     
 # Only for testing
 if __name__ == '__main__':
