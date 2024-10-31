@@ -280,32 +280,52 @@ def upsample_ray_data(data_matrix, res_x, res_y, res_coef):
     return upsampled_data_matrix
 
 
-def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path):
+def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path, num_dtype=np.float32):
+    """Saves the UV map of the texture from coords_matrix and upsamples to res_x*res_y if res_coef < 1"""
+    
     # Convert the ray data array to upsampled render size array
     coords_data = np.array(coords_matrix, dtype=object)
     upsampled_data = upsample_ray_data(coords_data, res_x, res_y, res_coef)
 
-    pixels = np.zeros((res_y, res_x, 4), dtype=np.float32)
+    pixels = np.zeros((res_y, res_x, 4), dtype=num_dtype)
 
     # Mask for valid not None values
     mask = np.array([[v is not None for v in y] for y in upsampled_data])
 
     # Extract valid values where the mask is True
-    # RGB
-    pixels[mask, 0] = np.array([[v[2] if v is not None else 0 for v in y] for y in upsampled_data])[mask]
-    pixels[mask, 1] = np.array([[v[3] if v is not None else 0 for v in y] for y in upsampled_data])[mask]
-    # Alpha
+    # RGB (assign 0 if None)
+    pixels[mask, 0] = np.array([[v[2] if v is not None else 0.0 for v in y] for y in upsampled_data])[mask]
+    pixels[mask, 1] = np.array([[v[3] if v is not None else 0.0 for v in y] for y in upsampled_data])[mask]
+    # Alpha channel, 1 for valid pixels
     pixels[mask, 3] = 1.0
 
-    # Create and save the image
-    image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True)
+    # Determine file extension and set image format
+    _, file_extension = os.path.splitext(file_path)
+    file_extension = file_extension.lower()
+
+    if file_extension in ['.exr']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
+        image.file_format = 'OPEN_EXR'
+    elif file_extension in ['.tiff', '.tif']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
+        image.file_format = 'TIFF'
+    elif file_extension in ['.png']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=False, is_data=True)
+        image.file_format = 'PNG'
+        # Converts float to PNG itself
+    else:
+        print(f"Unsupported file extension: {file_extension}. Defaulting to PNG.")
+        return None
+
     image.pixels = pixels.ravel()
     image.filepath_raw = file_path
-    image.file_format = 'PNG'
     image.save()
 
+    return image
 
-def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path):
+
+def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path, num_dtype=np.float32):
+    """Saves the Z depth map of the texture from z_vals_matrix and upsamples to res_x*res_y if res_coef < 1"""
 
     data_matrix = np.array(z_vals_matrix, dtype=float)
 
@@ -318,33 +338,33 @@ def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path):
     normalized_values = np.clip(z_values / max_z_value, 0.0, 1.0)
 
     # Create pixel array and fill with normalized RGB values
-    pixels = np.zeros((res_y, res_x, 4), dtype=np.float32)
+    pixels = np.zeros((res_y, res_x, 4), dtype=num_dtype)
     # RGB
     pixels[:, :, :3] = normalized_values[:, :, np.newaxis]
     # Alpha
     pixels[:, :, 3] = 1.0
     pixels[np.isnan(z_values)] = 0.0  # Where NaN
 
-    # Create an image for the map
-    image = bpy.data.images.new("", width=res_x, height=res_y, alpha=True)
+    # Determine file extension and set image format
+    _, file_extension = os.path.splitext(file_path)
+    file_extension = file_extension.lower()
+
+    if file_extension in ['.exr']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
+        image.file_format = 'OPEN_EXR'
+    elif file_extension in ['.tiff', '.tif']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
+        image.file_format = 'TIFF'
+    elif file_extension in ['.png']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=False, is_data=True)
+        image.file_format = 'PNG'
+        # Converts float to PNG itself
+    else:
+        print(f"Unsupported file extension: {file_extension}. Defaulting to PNG.")
+        return None
+
     image.pixels = pixels.ravel()
     image.filepath_raw = file_path
-    image.file_format = 'PNG'
     image.save()
 
-
-    
-# Only for testing
-if __name__ == '__main__':
-    # Target object with the texture
-    target_object = bpy.data.objects['Target_object']
-
-    # Camera which is the ray source
-    cam = bpy.data.objects['Main_camera']
-
-    set_render_resolution(1920, 1080)
-    
-    # Cast rays from the camera to the texture for res_coef * <n_pixels> rays
-    outputs = cast_rays_to_texture(cam, target_object, res_coef=0.01, visualize=True)
-    
-    export_outputs('rays.txt', outputs)
+    return image

@@ -1,7 +1,7 @@
 import bpy
 import os
 import math
-from mathutils import Euler
+from mathutils import Euler, Quaternion
 import random
 import colorsys
 
@@ -45,6 +45,21 @@ def create_light(name, props, light_type='POINT'):
     # Link to the current collection
     bpy.context.collection.objects.link(light_object)
     
+    return light_object
+
+
+def create_area_light(name, location, size, energy):
+    """Creates an area light object"""
+    
+    light_data = bpy.data.lights.new(name, 'AREA')
+    light_object = bpy.data.objects.new(name, light_data)
+
+    light_object.location = location
+    light_data.energy = energy
+    light_data.size = size
+
+    bpy.context.collection.objects.link(light_object)
+
     return light_object
 
 
@@ -103,7 +118,7 @@ def render_view(render_path):
     bpy.ops.render.render(write_still=True)
 
 
-def create_crumpled_plane(obj_name="Crumpled_plane", size=(2, 2), location=(0, 0, 0), cuts=10, crumple_factor=0.2):
+def create_crumpled_plane(obj_name="Crumpled_plane", size=(2, 2), location=(0, 0, 0), cuts_range=(2,12), crumple_factor=0.2):
     """Creates a crumpled pad to act as an auxiliary surface"""
     
     # Remove object if it exists
@@ -119,6 +134,7 @@ def create_crumpled_plane(obj_name="Crumpled_plane", size=(2, 2), location=(0, 0
     plane.dimensions = (*size, 0)
 
     # Subdivide the plane
+    cuts = random.randint(*cuts_range)
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.subdivide(number_cuts=cuts)
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -193,7 +209,6 @@ def add_physics(target_object_name, props):
         smooth_modifier.factor = props['SMOOTH_FACTOR']
         
         # Get corrective smooth modifier
-        # TODO constants move out
         corrective_smooth_modifier = target_object.modifiers.get("CorrectiveSmooth")
         if corrective_smooth_modifier is None:
             # Add Corrective Smooth modifier
@@ -230,6 +245,74 @@ def subdivide(plane_obj, cuts):
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.subdivide(number_cuts=cuts)
     bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def get_random_camera_location(radius, min_angle=0, max_angle=math.pi/3):
+    """
+    Get a random camera location in the specific sphere sector.
+    The upper hemisphere is in the range min_angle=0 and max_angle=math.pi/2
+    """
+    # Hemisphere sector from the top (0 is the top, math.pi / 4 is +-45°)
+    theta = random.uniform(min_angle, max_angle)
+    phi = random.uniform(0, 2 * math.pi)
+    
+    # Spherical to Cartesian conversion
+    x = radius * math.sin(theta) * math.cos(phi)
+    y = radius * math.sin(theta) * math.sin(phi)
+    z = radius * math.cos(theta)
+    
+    return [x, y, z]
+
+
+def look_at(camera_obj, target):
+    """Rotates the camera so that it looks at the specific target point"""
+    # Compute the direction vector from the camera to the target
+    direction = camera_obj.location - target
+    
+    # Quaternion rotation to track the target point
+    rot_quat = direction.to_track_quat('Z', 'Y')
+    
+    # Apply the rotation to look at the point
+    camera_obj.rotation_mode = 'QUATERNION'
+    camera_obj.rotation_quaternion = rot_quat
+
+    # Roll the camera around its view axis depending on z rotation angle
+    camera_obj.rotation_mode = 'XYZ'
+    roll_quat = Quaternion((0.0, 0.0, 1.0), -camera_obj.rotation_euler.z)
+    camera_obj.rotation_mode = 'QUATERNION'
+    camera_obj.rotation_quaternion = camera_obj.rotation_quaternion @ roll_quat
+
+    
+def save_camera_info(info_data_path, camera_info_list):
+    """Writes ',' separated data to the file at info_data_path"""
+    with open(info_data_path, 'w') as f:
+        for data_row in camera_info_list:
+            f.write(','.join(map(str, data_row)) + '\n')
+    
+
+def get_camera_info(camera, target, dec_places):
+    """
+    Extract camera relative position and quaternion rotation info 
+    
+    Returns: Relative coordinates to the target origin and the quaternion rotation
+        [pos_x, pos_y, pos_z, rot_w, rot_x, rot_y, rot_z]
+    """
+    # Get the camera's world location and rotation
+    cam_loc = camera.matrix_world.to_translation()
+    cam_rot = camera.matrix_world.to_quaternion()
+
+    # Get the target's world location and its inverse rotation
+    target_loc = target.matrix_world.to_translation()
+    target_rot_inv = target.matrix_world.to_quaternion().inverted()
+
+    # Calculate relative location and rotation
+    relative_loc = cam_loc - target_loc
+    relative_rot = target_rot_inv @ cam_rot
+
+    result = [*relative_loc, *relative_rot]
+    rounded_result = [round(value, dec_places) for value in result]
+    
+    return rounded_result
 
 
 

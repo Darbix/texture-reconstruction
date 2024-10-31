@@ -92,6 +92,44 @@ def delete_all_objects():
         bpy.data.objects.remove(obj, do_unlink=True)
 
 
+def setup_collision_removal_handler(obj, removal_frame, hide, last_frame):
+    """
+    Set up a frame change handler to remove the collision modifier from the object
+    at a specific frame.
+    Args:
+    - obj: The object with a collision modifier to be removed.
+    - removal_frame: The frame at which to remove the collision modifier.
+    - hide: Whether to hide the object after removing the modifier.
+    - last_frame: The total number of frames in the animation.
+    """
+    if removal_frame > 0 and removal_frame < last_frame:
+        # Define the frame change handler function
+        def frame_change_handler(scene):
+            # Check if the object still exists in the scene
+            if obj and obj.name in scene.objects:
+                if scene.frame_current == removal_frame:
+                    # Remove collision modifier for the object
+                    for modifier in obj.modifiers:
+                        if modifier.type == 'COLLISION':
+                            obj.modifiers.remove(modifier)
+                            if hide:
+                                obj.hide_viewport = True
+                    # Remove this handler after it has executed to avoid it running again
+                    bpy.app.handlers.frame_change_post.remove(frame_change_handler)
+            else:
+                # If the object doesn't exist anymore, remove the handler
+                bpy.app.handlers.frame_change_post.remove(frame_change_handler)
+
+        # Remove any existing handlers to avoid duplicates
+        handlers = bpy.app.handlers.frame_change_post.copy()
+        for handler in handlers:
+            if handler.__name__ == "frame_change_handler":
+                bpy.app.handlers.frame_change_post.remove(handler)
+
+        # Add the frame change handler
+        bpy.app.handlers.frame_change_post.append(frame_change_handler)
+
+
 
 if __name__ == "__main__":
     delete_all_objects()

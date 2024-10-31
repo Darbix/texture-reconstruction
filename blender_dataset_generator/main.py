@@ -33,6 +33,7 @@ importlib.reload(data_generation)
 TARGET_OBJECT = 'Target_object'
 MAIN_CAMERA = 'Main_camera'
 SURFACE_OBJECT = 'Surface_object'
+CRUMPLED_PLANE = 'Crumpled_plane'
 
 textures_dir = abs_curr_dir + '/texture_images' 
 renders_dir = abs_curr_dir + '/camera_images'
@@ -70,50 +71,11 @@ def cast_rays(file_path_name, res_x=1920, res_y=1080, visualize=False, res_coef=
     # If file path to the general name is set, save data
     if(file_path_name):
         # Save UV map image
-        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef, file_path_name + '_uv.png')
+        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef, file_path_name + '_uv.tiff')
         # Save Z-buffer image
-        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef, file_path_name + '_z.png')
+        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef, file_path_name + '_z.tiff')
         # Save the render image
-        texture_ray_casting.export_outputs(file_path_name + '.txt', outputs)
-
-
-def setup_collision_removal_handler(obj, removal_frame, hide, last_frame):
-    """
-    Set up a frame change handler to remove the collision modifier from the object
-    at a specific frame.
-    Args:
-    - obj: The object with a collision modifier to be removed.
-    - removal_frame: The frame at which to remove the collision modifier.
-    - hide: Whether to hide the object after removing the modifier.
-    - last_frame: The total number of frames in the animation.
-    """
-    if removal_frame > 0 and removal_frame < last_frame:
-        # Define the frame change handler function
-        def frame_change_handler(scene):
-            # Check if the object still exists in the scene
-            if obj and obj.name in scene.objects:
-                if scene.frame_current == removal_frame:
-                    # Remove collision modifier for the object
-                    for modifier in obj.modifiers:
-                        if modifier.type == 'COLLISION':
-                            obj.modifiers.remove(modifier)
-                            if hide:
-                                obj.hide_viewport = True
-                    # Remove this handler after it has executed to avoid it running again
-                    bpy.app.handlers.frame_change_post.remove(frame_change_handler)
-            else:
-                # If the object doesn't exist anymore, remove the handler
-                bpy.app.handlers.frame_change_post.remove(frame_change_handler)
-
-        # Remove any existing handlers to avoid duplicates
-        handlers = bpy.app.handlers.frame_change_post.copy()
-        for handler in handlers:
-            if handler.__name__ == "frame_change_handler":
-                bpy.app.handlers.frame_change_post.remove(handler)
-
-        # Add the frame change handler
-        bpy.app.handlers.frame_change_post.append(frame_change_handler)
-
+#        texture_ray_casting.export_outputs(file_path_name + '.txt', outputs)
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
@@ -126,12 +88,21 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         RES_X = 1920                # Render resolution X
         RES_Y = 1080                # Render resolution Y
-        RES_COEF = 0.15             # Resolution reduction (normalized num of rays to render)
+        RES_COEF = 0.30             # Resolution reduction (normalized num of rays to render)
+        ORIGIN_WORLD_CENTER = True  # Set the target origin to the (0,0,0) (else the bbox center)
         
+        # ----- Camera constants -----
+        VIEWS_PER_TEXTURE = 2               # Camera random views to render for each image
+        FOCAL_LENGTH = 50                   # Focal length
+        PADDING_PERC = 0.15                 # The camera will not look further than (1-padding) from the center
+        DIST_RADIUS_RANGE = (2.5, 7)        # Radius range in meters
+        SECTOR_ANGLE_RANGE = (0, math.pi/3) # Sector angle rangle to place camera at
+        CAMERA_DEC_PLACES = 9               # Decimal places to round output camera data
+
         # ----- Crumpled plane constants -----
-        CRUMPLED_PLANE_CUTS = 3           # Subdivision cuts
-        CRUMPLE_FACTOR = 0.40             # How strong (high) the peaks are
-        REDUCTION_RANGE = (0.95, 1.25)    # Percentual reduction compared to the texture
+        CRUMPLED_PLANE_CUTS_RANGE = (2, 15) # Subdivision cuts
+        CRUMPLE_FACTOR_RANGE = (0.3, 0.40)  # Range to pick the max strengh (height) of the peaks
+        REDUCTION_RANGE = (0.95, 1.25)      # Percentual reduction compared to the texture
         
         # ----- Target object constants -----
         TARGET_OBJECT_CUTS = 100          # Subdivision cuts
@@ -151,17 +122,17 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'CLOTH_QUALITY': 10,                # Quality steps
             'VERTEX_MASS': 0.5,                 # Vertex mass
             'AIR_DAMPING': 1.0,                 # Air viscosity
-            'TENSION_STIFFNESS': 2000,          # Tension
-            'BENDING': 0.1,                     # Bending
-            'COMPRESSION_STIFFNESS': 100,       # Compression
+            'TENSION_STIFFNESS': 2000,          # Tension (stretching resistance)
+            'BENDING': 2.0,                     # Bending
+            'COMPRESSION_STIFFNESS': 200,       # Compression
             'SHEAR_STIFFNESS': 200,             # Shear
             'COLLISION_QUALITY': 5,             # Collision quality
             'MIN_COLLISION_DISTANCE': 0.01,     # Minimum distance for collisions
             'GRAVITY': 10,                      # Gravity
             'SPEED_MULTIPLIER': 1,              # Speed multiplier
             'SMOOTH_FACTOR': 0.5,               # Smooth factor
-            'CORRECTIVE_SMOOTH_FACTOR': 0.1,    # Corrective smooth factor
-            'CORRECTIVE_SMOOTH_ITERATIONS': 10  # Corrective smooth repeat
+            'CORRECTIVE_SMOOTH_FACTOR': 0.5,    # Corrective smooth factor
+            'CORRECTIVE_SMOOTH_ITERATIONS': 5   # Corrective smooth repeat
         }
         
         # ----- Light constants -----
@@ -174,26 +145,16 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'y': (-4.0, 4.0),
             'z': (2.0, 7.0)
         }
+        AREA_LOCATION = (0,0,5)       # Area light location
+        AREA_SIZE = 5                 # Area light radius size
+        AREA_ENERGY_RANGE = (50, 100) # Area light watt energy range
         
-        # ----- Camera constants -----
-        distance = 7 # [m] from the target object
-        d = distance / math.sqrt(2)
-        # The distance from the texture center is approximately 6m
-        camera_views = [
-            # Side views
-            {'location': [0.0, -d, d], 'rotation': [45, 0,  0]}, # Bottom
-            {'location': [d,  0.0, d], 'rotation': [0, 45,  0]}, # Right
-            {'location': [0.0,  d, d], 'rotation': [-45, 0, 0]}, # Top
-            {'location': [-d, 0.0, d], 'rotation': [0, -45, 0]}, # Left
-            # Top view
-            {'location': [0.0, 0.0, distance], 'rotation': [0, 0, 0]},
-        ]
-
 
         # Load steady objects
         surface_object = bpy.data.objects[surface_name]
         cam = bpy.data.objects[cam_name]
         bpy.context.scene.camera = cam
+        cam.data.lens = FOCAL_LENGTH
         
         # Get static surface nodes for materials
         nodes_surface, texture_node_surface = data_generation.set_material_nodes(surface_object, 'Surface_texture_material')
@@ -212,6 +173,9 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 texture_name_without_extension = texture_name.rsplit('.', 1)[0]
                 texture_path = os.path.join(textures_dir, texture_name)
                 
+                # ----- Initial settings -----
+                CRUMPLE_FACTOR = random.uniform(*CRUMPLE_FACTOR_RANGE)
+                
                 # ----- Target object settings -----
                 # Change the image texture
                 loaded_texture = bpy.data.images.load(texture_path)
@@ -223,7 +187,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 dim_h = TARGET_OBJECT_MAX_SIZE if size_ratio <= 1 else TARGET_OBJECT_MAX_SIZE / size_ratio
                 
                 # Create a target object plane
-                target_object = data_generation.create_target_object("Target_object",
+                target_object = data_generation.create_target_object(TARGET_OBJECT,
                     subdivisions=TARGET_OBJECT_CUTS, dimensions=(dim_w, dim_h, 0.0),
                     location=(0, 0, CRUMPLE_FACTOR + HEIGHT_ABOVE_CRUMPLED))
                 data_generation.add_physics(target_name, physics_props)
@@ -246,9 +210,9 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # ----- Crumpled plane settings -----
                 # Create the crumpled plane to form the main texture object
                 reduction = random.uniform(*REDUCTION_RANGE)
-                crumpled_object = data_generation.create_crumpled_plane(obj_name="Crumpled_plane",
+                crumpled_object = data_generation.create_crumpled_plane(obj_name=CRUMPLED_PLANE,
                     size=(dim_w * reduction, dim_h * reduction), location=(0, 0, 0),
-                    cuts=CRUMPLED_PLANE_CUTS, crumple_factor=CRUMPLE_FACTOR)
+                    cuts_range=CRUMPLED_PLANE_CUTS_RANGE, crumple_factor=CRUMPLE_FACTOR)
                 crumpled_object.hide_render = True
                 
                 
@@ -264,6 +228,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 
                 # ----- Light settings -----
                 light_objects = []
+                light_objects.append(data_generation.create_area_light('Light_area_0',
+                    AREA_LOCATION, AREA_SIZE, random.randint(*AREA_ENERGY_RANGE)))
                 light_objects.append(data_generation.create_light('Light_0', main_light_props))
                 light_objects.append(data_generation.create_light('Light_1', main_light_props))
                 
@@ -273,7 +239,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                    
                 # Remove the collision crumpled object at the specific frame
                 # Using this the target falls a bit under to touch the background plane
-                setup_collision_removal_handler(crumpled_object, FRAME_REMOVE_CRUMPLED, HIDE_CRUMPLED, FRAME_NUMBER)
+                scene_init.setup_collision_removal_handler(crumpled_object, FRAME_REMOVE_CRUMPLED, HIDE_CRUMPLED, FRAME_NUMBER)
 
                 cloth_modifier.point_cache.frame_start = 1
                 cloth_modifier.point_cache.frame_end = FRAME_NUMBER
@@ -282,42 +248,102 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 bpy.context.scene.frame_set(FRAME_NUMBER)
                 bpy.context.view_layer.update()
                 
+                
+                # ----- Target object info -----
+                world_bbox_coords = [target_object.matrix_world @ Vector(corner) for corner in target_object.bound_box]
 
+                x_coords = [coord.x for coord in world_bbox_coords]
+                y_coords = [coord.y for coord in world_bbox_coords]
+                z_coords = [coord.z for coord in world_bbox_coords]
+                
+                bbox_min = Vector((min(x_coords), min(y_coords), min(z_coords)))
+                bbox_max = Vector((max(x_coords), max(y_coords), max(z_coords)))
+
+                
+                # ----- Shift target object origin -----
+                # Using the cursor set the target object origin to the world center
+                # or the object bounding box center
+                center = (0.0, 0.0, 0.0) if ORIGIN_WORLD_CENTER else (bbox_min + bbox_max) / 2
+                bpy.context.scene.cursor.location = center
+                # Recenter the origin after the animation
+                target_object.select_set(True)
+                bpy.context.view_layer.objects.active = target_object
+                bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+                target_object.select_set(False)
+                
+                
+#                # Export the target object plane mesh to /path/<file><number>.obj
+#                filepath = '/home/darbix/Desktop/planes/plane.obj'
+#                base, ext = os.path.splitext(filepath)
+#                i = 1
+#                while os.path.exists(f"{base}{i}{ext}"):
+#                    i += 1
+#                filepath = f"{base}{i}{ext}"
+#                target_object.select_set(True)
+#                bpy.ops.wm.obj_export(filepath=filepath, export_selected_objects=True,
+#                    apply_modifiers=True, filter_glob='*.obj')
+#                target_object.select_set(False)
+#                continue
+                
                 
                 # ----- Render -----
                 # Change a camera view and render a result
-                # TODO camera views will not be 5 constant points
-                for view_index, view_item in enumerate(camera_views):
+                
+                camera_info_list = []
+                for view_index in range(0, VIEWS_PER_TEXTURE):
+                    # Get a random target object point to look at
+                    point_x = random.uniform(bbox_min[0], bbox_max[0]) * (1 - PADDING_PERC)
+                    point_y = random.uniform(bbox_min[1], bbox_max[1]) * (1 - PADDING_PERC)
+
                     # Set the camera to a specific view position
-                    data_generation.set_camera_position_and_rotation(cam, view_item)
+                    random_location = data_generation.get_random_camera_location(
+                        random.uniform(*DIST_RADIUS_RANGE), *SECTOR_ANGLE_RANGE)
+                    camera = bpy.data.objects[MAIN_CAMERA]
+                    camera.location = random_location
+                    # Change the camera look to the random point
+                    data_generation.look_at(camera, Vector((point_x, point_y, 0)))
                     bpy.context.view_layer.update()
                     
+                    str_view_index = f"{view_index:02d}"
+                    
+                    # Keep data for the save at the end of the render
+                    data_row = [str_view_index, *data_generation.get_camera_info(cam, target_object, CAMERA_DEC_PLACES)]
+                    camera_info_list.append(data_row)
+
                     # Render the view
                     render_path = os.path.join(renders_dir,
-                        f"{texture_name_without_extension}_view_{view_index:02d}.jpg")
+                        f"{texture_name_without_extension}_view_{str_view_index}.jpg")
                     data_generation.render_view(render_path)    
                     
                     # Cast the rays from the camera to the target object's texture 
                     cast_rays(render_path.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, visualize=False)
                 
+#                    return # TODO shows only one view 
+                
+                
                 # Remove created objects
                 for light_object in light_objects:
                     bpy.data.objects.remove(light_object)
                 bpy.ops.object.select_all(action='DESELECT') 
                 
+                # Save data for cameras
+                info_data_path = os.path.join(renders_dir,
+                        f"{texture_name_without_extension}_data.txt")
+                data_generation.save_camera_info(info_data_path, camera_info_list)
+                
                 print(f"Views for {texture_name} rendered.")
-    
+
 
 
 if __name__ == "__main__":
-    initialize_scene(surface_size=9)
+    initialize_scene(surface_size=10)
     
     if not os.path.exists(renders_dir):
         os.makedirs(renders_dir)
     
     # Set random seed
-    random.seed(27)
+    random.seed(5)
     
     num_images = 2
     generate_data(textures_dir, renders_dir, surfaces_dir,
