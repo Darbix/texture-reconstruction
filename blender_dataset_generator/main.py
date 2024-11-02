@@ -1,85 +1,43 @@
-import os
-import sys
-import random
-import bpy
-import math
-import bmesh
-import importlib
-import mathutils
 import numpy as np
+import mathutils
+import importlib
+import random
+import bmesh
+import math
+import bpy
+import sys
+import os
 
-def force_reload_module(module_name, path):
-    sys.path.insert(0, path)  # Add the path to the module
-    module = __import__(module_name)  # Import the module
-    importlib.reload(module)  # Reload the module
-    return module
+modules = ['scene_init', 'texture_ray_casting', 'data_generation']
 
 # Absolute path to the project directory (can be set manually)
 abs_curr_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else os.getcwd()
-
-sys.path.insert(0, abs_curr_dir + '/scene_init')
-import scene_init
-importlib.reload(scene_init)
-
-sys.path.insert(0, abs_curr_dir + '/texture_ray_casting')
-import texture_ray_casting
-importlib.reload(texture_ray_casting)
-
-sys.path.insert(0, abs_curr_dir + '/data_generation')
-import data_generation
-importlib.reload(data_generation)
-
-
-TARGET_OBJECT = 'Target_object'
-MAIN_CAMERA = 'Main_camera'
-SURFACE_OBJECT = 'Surface_object'
-CRUMPLED_PLANE = 'Crumpled_plane'
-
-textures_dir = abs_curr_dir + '/texture_images' 
-renders_dir = abs_curr_dir + '/camera_images'
-surfaces_dir = abs_curr_dir + '/surface_images'
-
-
-def initialize_scene(surface_size):
-    # Delete all objects
-    scene_init.delete_all_objects()
+# Import and reload modules from the list
+for module in modules:
+    module_path = os.path.join(abs_curr_dir, module)
+    sys.path.insert(0, module_path)
+    imported_module = importlib.import_module(module)
+    importlib.reload(imported_module)
     
-    # Background object
-    size = surface_size # Size in meters
-    background_object = scene_init.create_background_object(SURFACE_OBJECT,
-        dimensions=(size, size, 0), location=(0, 0, 0))
-    scene_init.set_background_object_modifiers(background_object)
-    
-    # Camera
-    scene_init.create_camera(name=MAIN_CAMERA, location=(0.0, -5.0, 5.0),
-        rotation_deg=(45, 0, 0))
 
+# ----- Constants -----
+TARGET_OBJECT = 'Target_object'   # Target texture object plane name
+MAIN_CAMERA = 'Main_camera'       # Name of the main camera for rendering 
+SURFACE_OBJECT = 'Surface_object' # Background sourface object name
+CRUMPLED_PLANE = 'Crumpled_plane' # Name of the crumpled plane for target deformations
 
-def cast_rays(file_path_name, res_x=1920, res_y=1080, visualize=False, res_coef=1.0):
-    # Target object with the texture
-    target_object = bpy.data.objects[TARGET_OBJECT]
+TEXTURES_DIR = abs_curr_dir + '/texture_images' # Path to the source texture images
+SURFACES_DIR = abs_curr_dir + '/surface_images' # Path to the surface textures
+RENDERS_DIR = abs_curr_dir + '/camera_images'   # Path to the render directory
+OBJ_DIR = abs_curr_dir + '/scene_objects'       # Path to the exported scene objects
 
-    # Camera which is the ray source
-    cam = bpy.data.objects[MAIN_CAMERA]
-
-    texture_ray_casting.set_render_resolution(res_x, res_y)
-    
-    # Cast rays from the camera to the texture for res_coef * <n_pixels> rays
-    outputs, z_vals = texture_ray_casting.cast_rays_to_texture(cam, target_object,
-        res_coef=res_coef, visualize=visualize)
-    
-    # If file path to the general name is set, save data
-    if(file_path_name):
-        # Save UV map image
-        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef, file_path_name + '_uv.tiff')
-        # Save Z-buffer image
-        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef, file_path_name + '_z.tiff')
-        # Save the render image
-#        texture_ray_casting.export_outputs(file_path_name + '.txt', outputs)
+NUM_SAMPLES = 2     # Max number of unique image sets to generate
+EXPORT_OBJ = False  # Bool to generate .obj objects
+SURFACE_SIZE = 10   # Constant background surface size in meters
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
-        surface_name, n_samples=-1):
+        surface_name, export_obj=False, n_samples=-1):
         """Generate data by changing textures, scene and views"""
         
         # ----- General constants -----
@@ -88,26 +46,28 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         RES_X = 1920                # Render resolution X
         RES_Y = 1080                # Render resolution Y
-        RES_COEF = 0.30             # Resolution reduction (normalized num of rays to render)
+        RES_COEF = 0.20             # Resolution reduction (normalized num of rays to render)
         ORIGIN_WORLD_CENTER = True  # Set the target origin to the (0,0,0) (else the bbox center)
         
         # ----- Camera constants -----
-        VIEWS_PER_TEXTURE = 2               # Camera random views to render for each image
+        VIEWS_PER_TEXTURE = 10              # Camera random views to render for each image
         FOCAL_LENGTH = 50                   # Focal length
-        PADDING_PERC = 0.15                 # The camera will not look further than (1-padding) from the center
+        PADDING_PERC = 0.2                  # The camera will not look further than (1-padding) from the center
         DIST_RADIUS_RANGE = (2.5, 7)        # Radius range in meters
         SECTOR_ANGLE_RANGE = (0, math.pi/3) # Sector angle rangle to place camera at
         CAMERA_DEC_PLACES = 9               # Decimal places to round output camera data
 
         # ----- Crumpled plane constants -----
-        CRUMPLED_PLANE_CUTS_RANGE = (2, 15) # Subdivision cuts
-        CRUMPLE_FACTOR_RANGE = (0.3, 0.40)  # Range to pick the max strengh (height) of the peaks
+        CRUMPLED_PLANE_CUTS_RANGE = (1, 10) # Subdivision cuts
+        CRUMPLE_FACTOR_RANGE = (0.20, 0.35) # Range to pick the max strengh (height [m]) of the peaks
         REDUCTION_RANGE = (0.95, 1.25)      # Percentual reduction compared to the texture
+        PERC_DEFORMED_RANGE = (0.10, 0.60)  # Procentual amount of vertices to be randomly increased in Z
+        DISSOLVE_RANGE = (0.0, 0.30)        # Procentual amount of vertices to dissolve (retransforms faces)
         
         # ----- Target object constants -----
-        TARGET_OBJECT_CUTS = 100          # Subdivision cuts
-        HEIGHT_ABOVE_CRUMPLED = 0.05      # How high above the pad the target is
-        TARGET_OBJECT_MAX_SIZE = 3        # Image/texture max size in meters 
+        TARGET_OBJECT_CUTS = 100            # Subdivision cuts
+        HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
+        TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
         
         texture_material_props = {
             'ROUGHNESS_RANGE': (0.4, 1.0) # 1.0 is fully matte, 0.0 is fully glossy
@@ -118,14 +78,14 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'METALLIC_RANGE': (0.0, 0.3)
         }
         
-        physics_props = {
-            'CLOTH_QUALITY': 10,                # Quality steps
+        physics_props = { 
+            'CLOTH_QUALITY': 5,                 # Quality steps
             'VERTEX_MASS': 0.5,                 # Vertex mass
             'AIR_DAMPING': 1.0,                 # Air viscosity
-            'TENSION_STIFFNESS': 2000,          # Tension (stretching resistance)
-            'BENDING': 2.0,                     # Bending
-            'COMPRESSION_STIFFNESS': 200,       # Compression
-            'SHEAR_STIFFNESS': 200,             # Shear
+            'TENSION_STIFFNESS': 5000,          # Tension (stretching resistance)
+            'BENDING': 1000,                    # Bending
+            'COMPRESSION_STIFFNESS': 1000,      # Compression
+            'SHEAR_STIFFNESS': 1000,            # Shear
             'COLLISION_QUALITY': 5,             # Collision quality
             'MIN_COLLISION_DISTANCE': 0.01,     # Minimum distance for collisions
             'GRAVITY': 10,                      # Gravity
@@ -149,7 +109,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         AREA_SIZE = 5                 # Area light radius size
         AREA_ENERGY_RANGE = (50, 100) # Area light watt energy range
         
-
+        
+        # ----- Loading -----
         # Load steady objects
         surface_object = bpy.data.objects[surface_name]
         cam = bpy.data.objects[cam_name]
@@ -161,15 +122,16 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         
         # Get all target object texture file names and surface file names
         texture_names = sorted(os.listdir(textures_dir))
-        n_samples = n_samples if n_samples >= 0 else len(texture_names)
+        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(n_samples)]
         
         surface_names = os.listdir(surfaces_dir)
         random.shuffle(surface_names)
         
-        # For each target texture
-        for texture_name in texture_names[:n_samples]:
+        
+        render_set = 0 # Identificator number for the singular data collection
+        # ----- Iterating over source textures -----
+        for texture_name in cyclic_texture_names:
             if texture_name.lower().endswith(('.png', '.jpg', '.jpeg')):      
-                      
                 texture_name_without_extension = texture_name.rsplit('.', 1)[0]
                 texture_path = os.path.join(textures_dir, texture_name)
                 
@@ -212,9 +174,10 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 reduction = random.uniform(*REDUCTION_RANGE)
                 crumpled_object = data_generation.create_crumpled_plane(obj_name=CRUMPLED_PLANE,
                     size=(dim_w * reduction, dim_h * reduction), location=(0, 0, 0),
-                    cuts_range=CRUMPLED_PLANE_CUTS_RANGE, crumple_factor=CRUMPLE_FACTOR)
+                    cuts_range=CRUMPLED_PLANE_CUTS_RANGE, crumple_factor=CRUMPLE_FACTOR,
+                    perc_deformed_range=PERC_DEFORMED_RANGE, dissolve_range=DISSOLVE_RANGE)
                 crumpled_object.hide_render = True
-                
+
                 
                 # ----- Surface settings -----
                 # Random surface texture select (the list is shuffled)
@@ -270,26 +233,15 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 bpy.context.view_layer.objects.active = target_object
                 bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
                 target_object.select_set(False)
+                            
                 
-                
-#                # Export the target object plane mesh to /path/<file><number>.obj
-#                filepath = '/home/darbix/Desktop/planes/plane.obj'
-#                base, ext = os.path.splitext(filepath)
-#                i = 1
-#                while os.path.exists(f"{base}{i}{ext}"):
-#                    i += 1
-#                filepath = f"{base}{i}{ext}"
-#                target_object.select_set(True)
-#                bpy.ops.wm.obj_export(filepath=filepath, export_selected_objects=True,
-#                    apply_modifiers=True, filter_glob='*.obj')
-#                target_object.select_set(False)
-#                continue
-                
+                # Export .obj files
+                if(export_obj):
+                    export_scene_objects(OBJ_DIR, render_set, [target_object])
                 
                 # ----- Render -----
-                # Change a camera view and render a result
-                
                 camera_info_list = []
+                # Change a camera view and render a result
                 for view_index in range(0, VIEWS_PER_TEXTURE):
                     # Get a random target object point to look at
                     point_x = random.uniform(bbox_min[0], bbox_max[0]) * (1 - PADDING_PERC)
@@ -309,42 +261,97 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     # Keep data for the save at the end of the render
                     data_row = [str_view_index, *data_generation.get_camera_info(cam, target_object, CAMERA_DEC_PLACES)]
                     camera_info_list.append(data_row)
-
+                    
                     # Render the view
                     render_path = os.path.join(renders_dir,
-                        f"{texture_name_without_extension}_view_{str_view_index}.jpg")
-                    data_generation.render_view(render_path)    
+                        f"set_{render_set:05d}_{texture_name_without_extension}_view_{str_view_index}.jpg")
+                    data_generation.render_view(render_path)
                     
                     # Cast the rays from the camera to the target object's texture 
-                    cast_rays(render_path.rsplit('.', 1)[0],
+                    ray_cast_and_export_maps(render_path.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, visualize=False)
-                
-#                    return # TODO shows only one view 
-                
-                
-                # Remove created objects
+                            
+
+                # ----- Remove created lights -----
                 for light_object in light_objects:
                     bpy.data.objects.remove(light_object)
                 bpy.ops.object.select_all(action='DESELECT') 
                 
-                # Save data for cameras
+                # ----- Save data for cameras -----
                 info_data_path = os.path.join(renders_dir,
-                        f"{texture_name_without_extension}_data.txt")
+                        f"set_{render_set:05d}_{texture_name_without_extension}_data.txt")
                 data_generation.save_camera_info(info_data_path, camera_info_list)
                 
                 print(f"Views for {texture_name} rendered.")
+                render_set += 1
+
+
+def initialize_scene(surface_size):
+    """Initialize the scene"""
+    # Delete all objects
+    scene_init.delete_all_objects()
+    
+    # Background object
+    size = surface_size # Size in meters
+    background_object = scene_init.create_background_object(SURFACE_OBJECT,
+        dimensions=(size, size, 0), location=(0, 0, 0))
+    scene_init.set_background_object_modifiers(background_object)
+    
+    # Camera
+    scene_init.create_camera(name=MAIN_CAMERA, location=(0.0, -5.0, 5.0),
+        rotation_deg=(45, 0, 0))
+
+
+def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=False, res_coef=1.0):
+    """Call ray casting and export result per-pixel maps for UV and Z"""
+    # Target object with the texture
+    target_object = bpy.data.objects[TARGET_OBJECT]
+
+    # Camera which is the ray source
+    cam = bpy.data.objects[MAIN_CAMERA]
+
+    texture_ray_casting.set_render_resolution(res_x, res_y)
+    
+    # Cast rays from the camera to the texture for res_coef * <n_pixels> rays
+    outputs, z_vals = texture_ray_casting.cast_rays_to_texture(cam, target_object,
+        res_coef=res_coef, visualize=visualize)
+    end_time = time.time()
+    
+    # If file path to the general name is set, save data
+    if(file_path_name):
+        # Save UV map image
+        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef, file_path_name + '_uv.tiff')
+        # Save Z-buffer image
+        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef, file_path_name + '_z.tiff')
+
+
+def export_scene_objects(export_obj_path, render_set, objects):
+    """Exports .obj files with objects to the directory"""
+    filepath = os.path.join(export_obj_path, f'plane_{render_set:05d}.obj')
+    
+    # Deselect all objects in the scene
+    bpy.ops.object.select_all(action='DESELECT')
+    # Select objects to export
+    for exp_object in objects:
+        exp_object.select_set(True)
+        
+    bpy.ops.wm.obj_export(filepath=filepath, export_selected_objects=True,
+        apply_modifiers=True, filter_glob='*.obj')
+    
+    bpy.ops.object.select_all(action='DESELECT')
 
 
 
 if __name__ == "__main__":
-    initialize_scene(surface_size=10)
-    
-    if not os.path.exists(renders_dir):
-        os.makedirs(renders_dir)
-    
-    # Set random seed
     random.seed(5)
     
-    num_images = 2
-    generate_data(textures_dir, renders_dir, surfaces_dir,
-             MAIN_CAMERA, TARGET_OBJECT, SURFACE_OBJECT, num_images)
+    initialize_scene(surface_size=SURFACE_SIZE)
+    
+    if not os.path.exists(RENDERS_DIR):
+        os.makedirs(RENDERS_DIR)
+    if not os.path.exists(OBJ_DIR):
+        os.makedirs(OBJ_DIR)
+    
+    generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR,
+             MAIN_CAMERA, TARGET_OBJECT, SURFACE_OBJECT, 
+             export_obj=EXPORT_OBJ, n_samples=NUM_SAMPLES)

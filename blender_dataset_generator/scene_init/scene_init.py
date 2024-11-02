@@ -2,7 +2,6 @@ import bpy
 import math
 import random
 
-
 def set_uv_map_texture(plane_obj, image):
     # Create a new material and enable nodes
     material = bpy.data.materials.new(name="ImageMaterial")
@@ -128,24 +127,4 @@ def setup_collision_removal_handler(obj, removal_frame, hide, last_frame):
 
         # Add the frame change handler
         bpy.app.handlers.frame_change_post.append(frame_change_handler)
-
-
-
-if __name__ == "__main__":
-    delete_all_objects()
-    
-    # Target object
-    target_object = create_target_object("Target_object", subdivisions=10, dimensions=(2, 2, 0), location=(0, 0, 0.05))
-    set_target_object_modifiers(target_object, mass=0.005, quality=5)
-    
-    # Background object
-    background_object = create_background_object("Background_object", dimensions=(5, 5, 0), location=(0, 0, 0))
-    set_background_object_modifiers(background_object)
-    
-    # Camera
-    create_camera(name="Main_camera", location=(0.0, -5.0, 5.0), rotation_deg=(45, 0, 0))
-    
-    # Other settings
-    curr_frame = 1
-    apply_simulation(target_object, start_frame=1, end_frame=curr_frame)
 

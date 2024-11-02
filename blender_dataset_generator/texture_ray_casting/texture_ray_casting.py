@@ -151,6 +151,7 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
     # The origin of rays (the camera center) relative to the target local space scale
     origin = matrix_world_inverted @ cam.matrix_world.translation
 
+
     # iterate over all x, y coordinates (vectors from the camera center to its plane pixels) 
     for ix, ray_rel_x in enumerate(ray_range_x):
         for iy, ray_rel_y in enumerate(ray_range_y):
@@ -163,13 +164,13 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
             direction = (destination - origin).normalized()
             
             # Ray casting (in the target object space)
-            hit, location, norm, face_index =  target_object.ray_cast(origin, direction)
-            
+            # Note: takes the second most execution time
+            hit, location, norm, face_index = target_object.ray_cast(origin, direction)
+
             if hit:
                 # Normalized texture coordinates (averaged by polygon vertices)
+                # Note takes the most execution time
                 texture_coords = convert_local_to_texture(target_object, face_index, location)
-                # if(texture_coords is None):
-                #     continue
 
                 # Store world space hits for ray visualization
                 world_coords = (matrix_world @ location)
@@ -187,7 +188,7 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
 
                 # Z-buffer values
                 z_vals[ix,iy] = (location - pixel_vector).length
-    
+
     if(visualize):
         # Draw points
         for row in values:
@@ -261,7 +262,7 @@ def set_render_resolution(rx, ry):
 
 
 def upsample_ray_data(data_matrix, res_x, res_y, res_coef):
-    """numpy array as input TODO"""
+    """Upsamples numpy array matrix to res_x * res_y size (the source has sizes res_coef * res_<x,y>)"""
     # Convert z_vals to a numpy array for easier manipulation
     w, h = data_matrix.shape
 
