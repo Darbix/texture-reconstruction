@@ -1,5 +1,5 @@
-import numpy as np
 from mathutils import Vector
+import numpy as np
 import importlib
 import random
 import bmesh
@@ -23,7 +23,7 @@ importlib.reload(texture_ray_casting)
 sys.path.insert(0, abs_curr_dir + '/data_generation')
 import data_generation
 importlib.reload(data_generation)
-    
+
 
 # ----- Constants -----
 TARGET_OBJECT = 'Target_object'   # Target texture object plane name
@@ -36,9 +36,13 @@ SURFACES_DIR = abs_curr_dir + '/surface_images' # Path to the surface textures
 RENDERS_DIR = abs_curr_dir + '/camera_images'   # Path to the render directory
 OBJ_DIR = abs_curr_dir + '/scene_objects'       # Path to the exported scene objects
 
-NUM_SAMPLES = 2     # Max number of unique image sets to generate
-EXPORT_OBJ = False  # Bool to generate .obj objects
-SURFACE_SIZE = 10   # Constant background surface size in meters
+NUM_SAMPLES = 2           # Max number of unique image sets to generate
+RENDER_FORMAT = 'PNG'     # Render image format
+RENDER_COLOR_DEPTH = '8'  # Render color depth
+RENDER_COMPRESSION = 25   # Render image compression
+EXPORT_OBJ = False        # Bool to generate .obj objects
+SURFACE_SIZE = 10         # Constant background surface size in meters
+RANDOM_SEED = 7           # Random seed to keep some properties the same
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
@@ -46,19 +50,20 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         """Generate data by changing textures, scene and views"""
         
         # ----- General constants -----
-        FRAME_NUMBER = 6            # Animation frame to generate
-        FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
-        HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         RES_X = 1920                # Render resolution X
         RES_Y = 1080                # Render resolution Y
         RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
+        VIEWS_PER_TEXTURE = 10      # Camera random views to render for each image
+        
+        FRAME_NUMBER = 6            # Animation frame to generate
+        FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
+        HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         ORIGIN_WORLD_CENTER = True  # Set the target origin to the (0,0,0) (else the bbox center)
         FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be the top left)
         
         # ----- Camera constants -----
-        VIEWS_PER_TEXTURE = 5               # Camera random views to render for each image
         FOCAL_LENGTH = 50                   # Focal length
-        PADDING_PERC = 0.2                  # The camera will not look further than (1-padding) from the center
+        PADDING_PERC = 0.25                 # The camera will not look further than (1-padding) from the center
         DIST_RADIUS_RANGE = (2.5, 7)        # Radius range in meters
         SECTOR_ANGLE_RANGE = (0, math.pi/3) # Sector angle rangle to place camera at
         CAMERA_DEC_PLACES = 9               # Decimal places to round output camera data
@@ -71,12 +76,12 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         DISSOLVE_RANGE = (0.0, 0.30)        # Procentual amount of vertices to dissolve (retransforms faces)
         
         # ----- Target object constants -----
-        TARGET_OBJECT_CUTS = 100            # Subdivision cuts
+        TARGET_OBJECT_CUTS = 128            # Subdivision cuts
         HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
         TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
         
         texture_material_props = {
-            'ROUGHNESS_RANGE': (0.4, 1.0) # 1.0 is fully matte, 0.0 is fully glossy
+            'ROUGHNESS_RANGE': (0.45, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
         }
         
         surface_material_props = {
@@ -97,8 +102,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'GRAVITY': 10,                      # Gravity
             'SPEED_MULTIPLIER': 1,              # Speed multiplier
             'SMOOTH_FACTOR': 0.5,               # Smooth factor
-            'CORRECTIVE_SMOOTH_FACTOR': 0.5,    # Corrective smooth factor
-            'CORRECTIVE_SMOOTH_ITERATIONS': 5   # Corrective smooth repeat
+            'CORRECTIVE_SMOOTH_FACTOR': 1.0,    # Corrective smooth factor
+            'CORRECTIVE_SMOOTH_ITERATIONS': 10  # Corrective smooth repeat
         }
         
         # ----- Light constants -----
@@ -278,6 +283,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     ray_cast_and_export_maps(render_path.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, flip_uv=FLIP_UV, visualize=False)
 
+
                 # ----- Remove created lights -----
                 for light_object in light_objects:
                     bpy.data.objects.remove(light_object)
@@ -288,7 +294,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                         f"set_{render_set:05d}_{texture_name_without_extension}_data.txt")
                 data_generation.save_camera_info(info_data_path, camera_info_list)
                 
-                print(f"Views for {texture_name} rendered.")
+                print(f"Views for {texture_name} rendered")
+                sys.stdout.flush()
                 render_set += 1
 
 
@@ -348,7 +355,7 @@ def export_scene_objects(export_obj_path, render_set, objects):
 
 
 
-random.seed(5)
+random.seed(RANDOM_SEED)
 
 if __name__ == "__main__":
     initialize_scene(surface_size=SURFACE_SIZE)
@@ -357,6 +364,11 @@ if __name__ == "__main__":
         os.makedirs(RENDERS_DIR)
     if not os.path.exists(OBJ_DIR):
         os.makedirs(OBJ_DIR)
+        
+    # Render settings
+    bpy.context.scene.render.image_settings.file_format = RENDER_FORMAT
+    bpy.context.scene.render.image_settings.color_depth = RENDER_COLOR_DEPTH
+    bpy.context.scene.render.image_settings.compression = RENDER_COMPRESSION
     
     generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
         SURFACE_OBJECT, export_obj=EXPORT_OBJ, n_samples=NUM_SAMPLES)
