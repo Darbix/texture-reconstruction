@@ -42,6 +42,7 @@ def create_light(name, props, light_type='POINT'):
     light_object.data.energy = random.uniform(*props['POWER'])
     light_object.data.color = colorsys.hsv_to_rgb(*color_hsv)
     light_object.location = light_location
+    light_object.data.shadow_filter_radius = random.uniform(*props['SHADOW_FILTER_RANGE'])
     
     # Link to the current collection
     bpy.context.collection.objects.link(light_object)
@@ -49,14 +50,15 @@ def create_light(name, props, light_type='POINT'):
     return light_object
 
 
-def create_area_light(name, location, size, energy):
+def create_area_light(name, location, size, energy_range, shadow_filter_range):
     """Creates an area light object"""
     
     light_data = bpy.data.lights.new(name, 'AREA')
     light_object = bpy.data.objects.new(name, light_data)
 
     light_object.location = location
-    light_data.energy = energy
+    light_data.energy = random.randint(*energy_range)
+    light_data.shadow_filter_radius = random.uniform(*shadow_filter_range)
     light_data.size = size
 
     bpy.context.collection.objects.link(light_object)

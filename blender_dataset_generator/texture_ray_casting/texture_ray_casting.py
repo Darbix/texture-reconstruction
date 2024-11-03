@@ -98,7 +98,7 @@ def draw_point_in_local_space(target_object, location):
     point_object.parent = target_object
 
 
-def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
+def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visualize=False):
     """
     Cast rays from the camera through the view plane pixels to the texture object
     Args:
@@ -151,6 +151,8 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
     # The origin of rays (the camera center) relative to the target local space scale
     origin = matrix_world_inverted @ cam.matrix_world.translation
 
+    # Flips the UV coordination coord -> 1-coord if needed
+    get_uv_coord = (lambda c: 1 - c[1]) if flip_uv else (lambda c: c)
 
     # iterate over all x, y coordinates (vectors from the camera center to its plane pixels) 
     for ix, ray_rel_x in enumerate(ray_range_x):
@@ -177,7 +179,7 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, visualize=False):
                 values[ix,iy] = world_coords
 
                 # Remove '1 -' to shift 0,0 from the top left to the bottom left
-                texture_coords = (texture_coords[0], 1 - texture_coords[1])
+                texture_coords = (texture_coords[0], get_uv_coord(texture_coords[1]))
 
                 # Normalized coordinates on the rendered camera image
                 cam_x = ray_rel_x + 0.5

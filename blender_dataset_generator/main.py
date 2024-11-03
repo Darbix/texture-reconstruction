@@ -1,5 +1,5 @@
 import numpy as np
-import mathutils
+from mathutils import Vector
 import importlib
 import random
 import bmesh
@@ -8,16 +8,21 @@ import bpy
 import sys
 import os
 
-modules = ['scene_init', 'texture_ray_casting', 'data_generation']
-
 # Absolute path to the project directory (can be set manually)
 abs_curr_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else os.getcwd()
-# Import and reload modules from the list
-for module in modules:
-    module_path = os.path.join(abs_curr_dir, module)
-    sys.path.insert(0, module_path)
-    imported_module = importlib.import_module(module)
-    importlib.reload(imported_module)
+
+# Import and reload modules to update
+sys.path.insert(0, abs_curr_dir + '/scene_init')
+import scene_init
+importlib.reload(scene_init)
+
+sys.path.insert(0, abs_curr_dir + '/texture_ray_casting')
+import texture_ray_casting
+importlib.reload(texture_ray_casting)
+
+sys.path.insert(0, abs_curr_dir + '/data_generation')
+import data_generation
+importlib.reload(data_generation)
     
 
 # ----- Constants -----
@@ -46,11 +51,12 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
         RES_X = 1920                # Render resolution X
         RES_Y = 1080                # Render resolution Y
-        RES_COEF = 0.20             # Resolution reduction (normalized num of rays to render)
+        RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
         ORIGIN_WORLD_CENTER = True  # Set the target origin to the (0,0,0) (else the bbox center)
+        FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be the top left)
         
         # ----- Camera constants -----
-        VIEWS_PER_TEXTURE = 10              # Camera random views to render for each image
+        VIEWS_PER_TEXTURE = 5               # Camera random views to render for each image
         FOCAL_LENGTH = 50                   # Focal length
         PADDING_PERC = 0.2                  # The camera will not look further than (1-padding) from the center
         DIST_RADIUS_RANGE = (2.5, 7)        # Radius range in meters
@@ -78,7 +84,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'METALLIC_RANGE': (0.0, 0.3)
         }
         
-        physics_props = { 
+        physics_props = {
             'CLOTH_QUALITY': 5,                 # Quality steps
             'VERTEX_MASS': 0.5,                 # Vertex mass
             'AIR_DAMPING': 1.0,                 # Air viscosity
@@ -103,12 +109,13 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'POWER': (450, 1300),
             'x': (-4.0, 4.0),
             'y': (-4.0, 4.0),
-            'z': (2.0, 7.0)
+            'z': (2.0, 7.0),
+            'SHADOW_FILTER_RANGE': (3, 6)
         }
-        AREA_LOCATION = (0,0,5)       # Area light location
-        AREA_SIZE = 5                 # Area light radius size
-        AREA_ENERGY_RANGE = (50, 100) # Area light watt energy range
-        
+        AREA_LOCATION = (0,0,5)            # Area light location
+        AREA_SIZE = 5                      # Area light radius size
+        AREA_ENERGY_RANGE = (50, 100)      # Area light watt energy range
+        AREA_SHADOW_FILTER_RANGE = (1, 5) # Area shadow filter range
         
         # ----- Loading -----
         # Load steady objects
@@ -192,7 +199,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # ----- Light settings -----
                 light_objects = []
                 light_objects.append(data_generation.create_area_light('Light_area_0',
-                    AREA_LOCATION, AREA_SIZE, random.randint(*AREA_ENERGY_RANGE)))
+                    AREA_LOCATION, AREA_SIZE, AREA_ENERGY_RANGE, AREA_SHADOW_FILTER_RANGE))
                 light_objects.append(data_generation.create_light('Light_0', main_light_props))
                 light_objects.append(data_generation.create_light('Light_1', main_light_props))
                 
@@ -269,8 +276,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     
                     # Cast the rays from the camera to the target object's texture 
                     ray_cast_and_export_maps(render_path.rsplit('.', 1)[0],
-                        res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, visualize=False)
-                            
+                        res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, flip_uv=FLIP_UV, visualize=False)
 
                 # ----- Remove created lights -----
                 for light_object in light_objects:
@@ -302,7 +308,8 @@ def initialize_scene(surface_size):
         rotation_deg=(45, 0, 0))
 
 
-def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=False, res_coef=1.0):
+def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=False,
+    res_coef=1.0, flip_uv=False):
     """Call ray casting and export result per-pixel maps for UV and Z"""
     # Target object with the texture
     target_object = bpy.data.objects[TARGET_OBJECT]
@@ -314,8 +321,7 @@ def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=F
     
     # Cast rays from the camera to the texture for res_coef * <n_pixels> rays
     outputs, z_vals = texture_ray_casting.cast_rays_to_texture(cam, target_object,
-        res_coef=res_coef, visualize=visualize)
-    end_time = time.time()
+        res_coef=res_coef, flip_uv=flip_uv, visualize=visualize)
     
     # If file path to the general name is set, save data
     if(file_path_name):
@@ -342,9 +348,9 @@ def export_scene_objects(export_obj_path, render_set, objects):
 
 
 
+random.seed(5)
+
 if __name__ == "__main__":
-    random.seed(5)
-    
     initialize_scene(surface_size=SURFACE_SIZE)
     
     if not os.path.exists(RENDERS_DIR):
@@ -352,6 +358,5 @@ if __name__ == "__main__":
     if not os.path.exists(OBJ_DIR):
         os.makedirs(OBJ_DIR)
     
-    generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR,
-             MAIN_CAMERA, TARGET_OBJECT, SURFACE_OBJECT, 
-             export_obj=EXPORT_OBJ, n_samples=NUM_SAMPLES)
+    generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
+        SURFACE_OBJECT, export_obj=EXPORT_OBJ, n_samples=NUM_SAMPLES)
