@@ -36,13 +36,21 @@ SURFACES_DIR = abs_curr_dir + '/surface_images' # Path to the surface textures
 RENDERS_DIR = abs_curr_dir + '/camera_images'   # Path to the render directory
 OBJ_DIR = abs_curr_dir + '/scene_objects'       # Path to the exported scene objects
 
-NUM_SAMPLES = 2           # Max number of unique image sets to generate
-RENDER_FORMAT = 'PNG'     # Render image format
-RENDER_COLOR_DEPTH = '8'  # Render color depth
-RENDER_COMPRESSION = 25   # Render image compression
-EXPORT_OBJ = False        # Bool to generate .obj objects
-SURFACE_SIZE = 10         # Constant background surface size in meters
-RANDOM_SEED = 7           # Random seed to keep some properties the same
+NUM_SAMPLES = 1             # Max number of unique image sets to generate
+RENDER_FORMAT = 'PNG'       # Render image format
+RENDER_COLOR_DEPTH = '8'    # Render color depth
+RENDER_COMPRESSION = 0      # Render image compression (0-100)
+RENDER_SAMPLES = 16         # Number of the render samples
+
+RES_X = 2 * 1920            # Render resolution X
+RES_Y = 2 * 1080            # Render resolution Y
+RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
+
+MAPS_EXP_FORMAT = 'exr'     # Format to generate UV and Z maps in (exr or png)
+MAPS_EXP_DEPTH = np.float16 # Color depth for UV and Z maps (png 8/16, exr 16/32)
+EXPORT_OBJ = False          # Bool to generate .obj objects
+SURFACE_SIZE = 10           # Constant background surface size in meters
+RANDOM_SEED = 7             # Random seed to keep some properties the same
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
@@ -50,10 +58,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         """Generate data by changing textures, scene and views"""
         
         # ----- General constants -----
-        RES_X = 1920                # Render resolution X
-        RES_Y = 1080                # Render resolution Y
-        RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
-        VIEWS_PER_TEXTURE = 10      # Camera random views to render for each image
+        VIEWS_PER_TEXTURE = 1       # Camera random views to render for each image
         
         FRAME_NUMBER = 6            # Animation frame to generate
         FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
@@ -73,7 +78,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         CRUMPLE_FACTOR_RANGE = (0.20, 0.35) # Range to pick the max strengh (height [m]) of the peaks
         REDUCTION_RANGE = (0.95, 1.25)      # Percentual reduction compared to the texture
         PERC_DEFORMED_RANGE = (0.10, 0.60)  # Procentual amount of vertices to be randomly increased in Z
-        DISSOLVE_RANGE = (0.0, 0.30)        # Procentual amount of vertices to dissolve (retransforms faces)
+        DISSOLVE_RANGE = (0.0, 0.25)        # Procentual amount of vertices to dissolve (retransforms faces)
         
         # ----- Target object constants -----
         TARGET_OBJECT_CUTS = 128            # Subdivision cuts
@@ -258,10 +263,11 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     # Get a random target object point to look at
                     point_x = random.uniform(bbox_min[0], bbox_max[0]) * (1 - PADDING_PERC)
                     point_y = random.uniform(bbox_min[1], bbox_max[1]) * (1 - PADDING_PERC)
-
+                    
                     # Set the camera to a specific view position
+                    radius = random.uniform(*DIST_RADIUS_RANGE)
                     random_location = data_generation.get_random_camera_location(
-                        random.uniform(*DIST_RADIUS_RANGE), *SECTOR_ANGLE_RANGE)
+                        radius, *SECTOR_ANGLE_RANGE)
                     camera = bpy.data.objects[MAIN_CAMERA]
                     camera.location = random_location
                     # Change the camera look to the random point
@@ -276,7 +282,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     
                     # Render the view
                     render_path = os.path.join(renders_dir,
-                        f"set_{render_set:05d}_{texture_name_without_extension}_view_{str_view_index}.jpg")
+                        f"set_{render_set:05d}_{texture_name_without_extension}_view_{str_view_index}." + RENDER_FORMAT.lower())
                     data_generation.render_view(render_path)
                     
                     # Cast the rays from the camera to the target object's texture 
@@ -333,9 +339,11 @@ def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=F
     # If file path to the general name is set, save data
     if(file_path_name):
         # Save UV map image
-        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef, file_path_name + '_uv.tiff')
+        texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef,
+            file_path_name + '_uv.' + MAPS_EXP_FORMAT, color_depth=MAPS_EXP_DEPTH)
         # Save Z-buffer image
-        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef, file_path_name + '_z.tiff')
+        texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef,
+            file_path_name + '_z.' + MAPS_EXP_FORMAT, color_depth=MAPS_EXP_DEPTH)
 
 
 def export_scene_objects(export_obj_path, render_set, objects):
@@ -366,9 +374,13 @@ if __name__ == "__main__":
         os.makedirs(OBJ_DIR)
         
     # Render settings
+    bpy.context.scene.render.resolution_x = RES_X
+    bpy.context.scene.render.resolution_y = RES_Y
+     
     bpy.context.scene.render.image_settings.file_format = RENDER_FORMAT
     bpy.context.scene.render.image_settings.color_depth = RENDER_COLOR_DEPTH
     bpy.context.scene.render.image_settings.compression = RENDER_COMPRESSION
+    bpy.context.scene.eevee.taa_samples = RENDER_SAMPLES
     
     generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
         SURFACE_OBJECT, export_obj=EXPORT_OBJ, n_samples=NUM_SAMPLES)

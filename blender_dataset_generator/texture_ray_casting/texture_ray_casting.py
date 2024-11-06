@@ -283,14 +283,60 @@ def upsample_ray_data(data_matrix, res_x, res_y, res_coef):
     return upsampled_data_matrix
 
 
-def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path, num_dtype=np.float32):
+def setup_and_save_image(file_path, pixels, color_depth_bits_str):
+    """Set render properties and create image from pixels and save to a specific format given by file_path extension"""
+    # Determine file extension and set image format
+    _, file_extension = os.path.splitext(file_path)
+    file_extension = file_extension.lower()
+
+    image = None
+    scene = bpy.context.scene
+    prev_format = scene.render.image_settings.file_format
+    prev_codec = scene.render.image_settings.exr_codec
+    prev_color_depth = scene.render.image_settings.color_depth
+
+    res_x = pixels.shape[1]
+    res_y = pixels.shape[0]
+
+    if file_extension in ['.exr']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
+        # image.file_format = 'OPEN_EXR'
+        scene.render.image_settings.file_format = 'OPEN_EXR'
+        scene.render.image_settings.exr_codec = 'ZIP'
+        scene.render.image_settings.color_depth = color_depth_bits_str
+    elif file_extension in ['.png']:
+        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=False, is_data=True)
+        # image.file_format = 'PNG'
+        scene.render.image_settings.file_format = 'PNG'
+        scene.render.image_settings.color_depth = color_depth_bits_str
+        # Converts float to PNG itself
+    else:
+        print(f"Unsupported file extension: {file_extension}. Defaulting to PNG.")
+        return None
+
+    image.pixels = pixels.ravel()
+    image.filepath_raw = file_path
+    image.save_render(file_path)
+
+    # Restore the previous render settings
+    scene.render.image_settings.file_format = prev_format
+    scene.render.image_settings.exr_codec = prev_codec
+    scene.render.image_settings.color_depth = prev_color_depth
+
+    # Remove image data from the memory
+    image.user_clear()
+    bpy.data.images.remove(image)
+
+    return image
+
+
+def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path, color_depth=np.float32):
     """Saves the UV map of the texture from coords_matrix and upsamples to res_x*res_y if res_coef < 1"""
-    
     # Convert the ray data array to upsampled render size array
     coords_data = np.array(coords_matrix, dtype=object)
     upsampled_data = upsample_ray_data(coords_data, res_x, res_y, res_coef)
 
-    pixels = np.zeros((res_y, res_x, 4), dtype=num_dtype)
+    pixels = np.zeros((res_y, res_x, 4), dtype=color_depth)
 
     # Mask for valid not None values
     mask = np.array([[v is not None for v in y] for y in upsampled_data])
@@ -302,34 +348,14 @@ def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path, num_dtyp
     # Alpha channel, 1 for valid pixels
     pixels[mask, 3] = 1.0
 
-    # Determine file extension and set image format
-    _, file_extension = os.path.splitext(file_path)
-    file_extension = file_extension.lower()
-
-    if file_extension in ['.exr']:
-        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
-        image.file_format = 'OPEN_EXR'
-    elif file_extension in ['.tiff', '.tif']:
-        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
-        image.file_format = 'TIFF'
-    elif file_extension in ['.png']:
-        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=False, is_data=True)
-        image.file_format = 'PNG'
-        # Converts float to PNG itself
-    else:
-        print(f"Unsupported file extension: {file_extension}. Defaulting to PNG.")
-        return None
-
-    image.pixels = pixels.ravel()
-    image.filepath_raw = file_path
-    image.save()
+    color_depth_bits_str = str(np.dtype(color_depth).itemsize * 8)
+    image = setup_and_save_image(file_path, pixels, color_depth_bits_str)
 
     return image
 
 
-def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path, num_dtype=np.float32):
+def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path, color_depth=np.float32):
     """Saves the Z depth map of the texture from z_vals_matrix and upsamples to res_x*res_y if res_coef < 1"""
-
     data_matrix = np.array(z_vals_matrix, dtype=float)
 
     z_values = upsample_ray_data(data_matrix, res_x, res_y, res_coef)
@@ -341,33 +367,14 @@ def get_z_value_map(z_vals_matrix, res_x, res_y, res_coef, file_path, num_dtype=
     normalized_values = np.clip(z_values / max_z_value, 0.0, 1.0)
 
     # Create pixel array and fill with normalized RGB values
-    pixels = np.zeros((res_y, res_x, 4), dtype=num_dtype)
+    pixels = np.zeros((res_y, res_x, 4), dtype=color_depth)
     # RGB
     pixels[:, :, :3] = normalized_values[:, :, np.newaxis]
     # Alpha
     pixels[:, :, 3] = 1.0
     pixels[np.isnan(z_values)] = 0.0  # Where NaN
 
-    # Determine file extension and set image format
-    _, file_extension = os.path.splitext(file_path)
-    file_extension = file_extension.lower()
-
-    if file_extension in ['.exr']:
-        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
-        image.file_format = 'OPEN_EXR'
-    elif file_extension in ['.tiff', '.tif']:
-        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=True, is_data=True)
-        image.file_format = 'TIFF'
-    elif file_extension in ['.png']:
-        image = bpy.data.images.new("UV_coord_map", width=res_x, height=res_y, alpha=True, float_buffer=False, is_data=True)
-        image.file_format = 'PNG'
-        # Converts float to PNG itself
-    else:
-        print(f"Unsupported file extension: {file_extension}. Defaulting to PNG.")
-        return None
-
-    image.pixels = pixels.ravel()
-    image.filepath_raw = file_path
-    image.save()
+    color_depth_bits_str = str(np.dtype(color_depth).itemsize * 8)
+    image = setup_and_save_image(file_path, pixels, color_depth_bits_str)
 
     return image
