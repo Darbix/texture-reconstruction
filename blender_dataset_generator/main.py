@@ -36,15 +36,15 @@ SURFACES_DIR = abs_curr_dir + '/surface_images' # Path to the surface textures
 RENDERS_DIR = abs_curr_dir + '/camera_images'   # Path to the render directory
 OBJ_DIR = abs_curr_dir + '/scene_objects'       # Path to the exported scene objects
 
-NUM_SAMPLES = 1             # Max number of unique image sets to generate
+NUM_SAMPLES = 2             # Max number of unique image sets to generate
 RENDER_FORMAT = 'PNG'       # Render image format
 RENDER_COLOR_DEPTH = '8'    # Render color depth
 RENDER_COMPRESSION = 0      # Render image compression (0-100)
 RENDER_SAMPLES = 16         # Number of the render samples
 
-RES_X = 2 * 1920            # Render resolution X
-RES_Y = 2 * 1080            # Render resolution Y
-RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
+RES_X = 1 * 1920            # Render resolution X
+RES_Y = 1 * 1080            # Render resolution Y
+RES_COEF = 0.05             # Resolution reduction (normalized num of rays to render)
 
 MAPS_EXP_FORMAT = 'exr'     # Format to generate UV and Z maps in (exr or png)
 MAPS_EXP_DEPTH = np.float16 # Color depth for UV and Z maps (png 8/16, exr 16/32)
@@ -58,7 +58,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         """Generate data by changing textures, scene and views"""
         
         # ----- General constants -----
-        VIEWS_PER_TEXTURE = 1       # Camera random views to render for each image
+        VIEWS_PER_TEXTURE = 6       # Camera random views to render for each image
+        TOP_VIEWS_NUMBER = 2        # Number of view from max VIEWS_PER_TEXTURE to be only top views
         
         FRAME_NUMBER = 6            # Animation frame to generate
         FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
@@ -68,10 +69,13 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         
         # ----- Camera constants -----
         FOCAL_LENGTH = 50                   # Focal length
-        PADDING_PERC = 0.25                 # The camera will not look further than (1-padding) from the center
+        PADDING_PERC = 0.3                  # The camera will not look to edges (1-padding)% away from the center
         DIST_RADIUS_RANGE = (2.5, 7)        # Radius range in meters
-        SECTOR_ANGLE_RANGE = (0, math.pi/3) # Sector angle rangle to place camera at
+        SECTOR_ANGLE_RANGE = (0, math.pi/4) # Sector angle rangle to place camera at (math.pi/2 is the flat)
         CAMERA_DEC_PLACES = 9               # Decimal places to round output camera data
+        TOP_VIEW_DISTANCE = (5.5, 7.5)      # Manually found out top-view camera distance [m] for landscape and portrait
+        TOP_VIEW_RND = (0.97, 1.2)          # The top view camera will deviate in given range of TOP_VIEW_DISTANCE 
+        TOP_VIEW_SECTOR_ANGLE_RANGE = (0, math.pi/10) # Sector range for the top view 
 
         # ----- Crumpled plane constants -----
         CRUMPLED_PLANE_CUTS_RANGE = (1, 10) # Subdivision cuts
@@ -116,7 +120,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
             'HUE': (0.0, 0.4),
             'SATURATION': (0.0, 1.0),
             'VALUE': (0.5, 1.0),
-            'POWER': (450, 1300),
+            'POWER': (450, 1200),
             'x': (-4.0, 4.0),
             'y': (-4.0, 4.0),
             'z': (2.0, 7.0),
@@ -145,7 +149,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         random.shuffle(surface_names)
         
         
-        render_set = 0 # Identificator number for the singular data collection
+        render_set = 0 # Identificator number for the particular data collection
         # ----- Iterating over source textures -----
         for texture_name in cyclic_texture_names:
             if texture_name.lower().endswith(('.png', '.jpg', '.jpeg')):      
@@ -238,7 +242,16 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 
                 bbox_min = Vector((min(x_coords), min(y_coords), min(z_coords)))
                 bbox_max = Vector((max(x_coords), max(y_coords), max(z_coords)))
-
+                
+                center_x = (bbox_min[0] + bbox_max[0]) / 2
+                center_y = (bbox_min[1] + bbox_max[1]) / 2
+                center_z = (bbox_min[2] + bbox_max[2]) / 2
+                bbox_center = Vector((center_x, center_y, center_z))
+                
+                half_width = (bbox_max[0] - bbox_min[0]) / 2
+                half_height = (bbox_max[1] - bbox_min[1]) / 2
+                
+                max_distance_factor = (1 - PADDING_PERC) / 2
                 
                 # ----- Shift target object origin -----
                 # Using the cursor set the target object origin to the world center
@@ -256,24 +269,44 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 if(export_obj):
                     export_scene_objects(OBJ_DIR, render_set, [target_object])
                 
-                # ----- Render -----
+                # ----- Views and rendering -----
                 camera_info_list = []
                 # Change a camera view and render a result
                 for view_index in range(0, VIEWS_PER_TEXTURE):
-                    # Get a random target object point to look at
-                    point_x = random.uniform(bbox_min[0], bbox_max[0]) * (1 - PADDING_PERC)
-                    point_y = random.uniform(bbox_min[1], bbox_max[1]) * (1 - PADDING_PERC)
+                    # ----- Camera view positioning ------
+                    # Point to look at
+                    point_x = 0
+                    point_y = 0
                     
-                    # Set the camera to a specific view position
-                    radius = random.uniform(*DIST_RADIUS_RANGE)
-                    random_location = data_generation.get_random_camera_location(
-                        radius, *SECTOR_ANGLE_RANGE)
+                    # The first few frames are only top views
+                    if(view_index < TOP_VIEWS_NUMBER):
+                        height_above = TOP_VIEW_DISTANCE[1] if half_width < half_height else TOP_VIEW_DISTANCE[0]
+                        perc_rnd = random.uniform(*TOP_VIEW_RND)
+                        height_above *= perc_rnd
+                        random_location = data_generation.get_random_camera_location(
+                            height_above, *TOP_VIEW_SECTOR_ANGLE_RANGE)
+                    else: 
+                        # Random views
+                        # Get a random target object point to look at
+                        point_x = random.uniform(center_x - half_width * max_distance_factor,
+                                                 center_x + half_width * max_distance_factor)
+                        point_y = random.uniform(center_y - half_height * max_distance_factor,
+                                                 center_y + half_height * max_distance_factor)
+                        
+                        # Set the camera to a specific view position
+                        radius = random.uniform(*DIST_RADIUS_RANGE)
+                        random_location = data_generation.get_random_camera_location(
+                            radius, *SECTOR_ANGLE_RANGE)
+
                     camera = bpy.data.objects[MAIN_CAMERA]
                     camera.location = random_location
+                    
                     # Change the camera look to the random point
                     data_generation.look_at(camera, Vector((point_x, point_y, 0)))
                     bpy.context.view_layer.update()
                     
+                    
+                    # ----- Rendering -----
                     str_view_index = f"{view_index:02d}"
                     
                     # Keep data for the save at the end of the render
