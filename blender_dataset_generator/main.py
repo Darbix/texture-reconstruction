@@ -3,6 +3,7 @@ import numpy as np
 import importlib
 import random
 import bmesh
+import uuid
 import math
 import bpy
 import sys
@@ -25,111 +26,118 @@ import data_generation
 importlib.reload(data_generation)
 
 
-# ----- Constants -----
+# ----- Object names -----
 TARGET_OBJECT = 'Target_object'   # Target texture object plane name
 MAIN_CAMERA = 'Main_camera'       # Name of the main camera for rendering 
 SURFACE_OBJECT = 'Surface_object' # Background sourface object name
 CRUMPLED_PLANE = 'Crumpled_plane' # Name of the crumpled plane for target deformations
 
+# ----- Paths -----
 TEXTURES_DIR = abs_curr_dir + '/texture_images' # Path to the source texture images
 SURFACES_DIR = abs_curr_dir + '/surface_images' # Path to the surface textures
 RENDERS_DIR = abs_curr_dir + '/camera_images'   # Path to the render directory
 OBJ_DIR = abs_curr_dir + '/scene_objects'       # Path to the exported scene objects
+IMG_SUBDIR = 'color_imgs'
+UV_SUBDIR = 'uv_imgs'
+Z_SUBDIR = 'depth_imgs'
 
-NUM_SAMPLES = 2             # Max number of unique image sets to generate
+# ----- Rendering and exports -----
+NUM_SAMPLES = 1             # Max number of unique image sets to generate
 RENDER_FORMAT = 'PNG'       # Render image format
 RENDER_COLOR_DEPTH = '8'    # Render color depth
 RENDER_COMPRESSION = 0      # Render image compression (0-100)
-RENDER_SAMPLES = 16         # Number of the render samples
+RENDER_SAMPLES = 64         # Number of the render samples
 
-RES_X = 1 * 1920            # Render resolution X
-RES_Y = 1 * 1080            # Render resolution Y
+RES_X = 1920                # Render resolution X
+RES_Y = 1080                # Render resolution Y
 RES_COEF = 0.05             # Resolution reduction (normalized num of rays to render)
 
 MAPS_EXP_FORMAT = 'exr'     # Format to generate UV and Z maps in (exr or png)
 MAPS_EXP_DEPTH = np.float16 # Color depth for UV and Z maps (png 8/16, exr 16/32)
-EXPORT_OBJ = False          # Bool to generate .obj objects
+EXPORT_ONLY_OBJS = False    # Bool to generate .obj objects
 SURFACE_SIZE = 10           # Constant background surface size in meters
-RANDOM_SEED = 7             # Random seed to keep some properties the same
+RANDOM_SEED = None          # Random seed to keep some properties the same
+SKIP_TEXTURES = 0           # Skip first N textures to generate other
+
+
+# ----- General constants -----
+VIEWS_PER_TEXTURE = 30      # Camera random views to render for each image
+TOP_VIEWS_NUMBER = 5        # Number of view from max VIEWS_PER_TEXTURE to be only top views
+
+FRAME_NUMBER = 6            # Animation frame to generate
+FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
+HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
+ORIGIN_WORLD_CENTER = True  # Set the target origin to the (0,0,0) (else the bbox center)
+FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be the top left)
+
+# ----- Camera properties -----
+FOCAL_LENGTH = 50                     # Focal length
+PADDING_PERC = 0.20                   # The camera will not look to edges (1-padding)% away from the center
+DIST_RADIUS_RANGE = (1.7, 6)          # Radius range in meters
+SECTOR_ANGLE_RANGE = (0, math.pi/3.3) # Sector angle rangle to place camera at (math.pi/2 is the flat)
+CAMERA_DEC_PLACES = 9                 # Decimal places to round output camera data
+TOP_VIEW_DISTANCE = (5.5, 7.5)        # Manually found out top-view camera distance [m] for landscape and portrait
+TOP_VIEW_RND = (0.97, 1.2)            # The top view camera will deviate in given range of TOP_VIEW_DISTANCE 
+TOP_VIEW_SECTOR_ANGLE_RANGE = (0, math.pi/9) # Sector range for the top view 
+
+# ----- Crumpled plane properties -----
+CRUMPLED_PLANE_CUTS_RANGE = (1, 10) # Subdivision cuts
+CRUMPLE_FACTOR_RANGE = (0.20, 0.38) # Range to pick the max strengh (height [m]) of the peaks
+REDUCTION_RANGE = (0.95, 1.25)      # Percentual reduction compared to the texture
+PERC_DEFORMED_RANGE = (0.12, 0.65)  # Procentual amount of vertices to be randomly increased in Z
+DISSOLVE_RANGE = (0.0, 0.25)        # Procentual amount of vertices to dissolve (retransforms faces)
+
+# ----- Target object properties -----
+TARGET_OBJECT_CUTS = 128            # Subdivision cuts
+HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
+TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
+
+texture_material_props = {
+    'ROUGHNESS_RANGE': (0.45, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
+}
+
+surface_material_props = {
+    'ROUGHNESS_RANGE': (0.2, 1.0),
+    'METALLIC_RANGE': (0.0, 0.3)
+}
+
+physics_props = {
+    'CLOTH_QUALITY': 5,                 # Quality steps
+    'VERTEX_MASS': 0.5,                 # Vertex mass
+    'AIR_DAMPING': 1.0,                 # Air viscosity
+    'TENSION_STIFFNESS': 4000,          # Tension (stretching resistance)
+    'BENDING': 1000,                    # Bending
+    'COMPRESSION_STIFFNESS': 1000,      # Compression
+    'SHEAR_STIFFNESS': 1000,            # Shear
+    'COLLISION_QUALITY': 5,             # Collision quality
+    'MIN_COLLISION_DISTANCE': 0.01,     # Minimum distance for collisions
+    'GRAVITY': 10,                      # Gravity
+    'SPEED_MULTIPLIER': 1,              # Speed multiplier
+    'SMOOTH_FACTOR': 0.5,               # Smooth factor
+    'CORRECTIVE_SMOOTH_FACTOR': 1.0,    # Corrective smooth factor
+    'CORRECTIVE_SMOOTH_ITERATIONS': 10  # Corrective smooth repeat
+}
+
+# ----- Light properties -----
+main_light_props = {
+    'HUE': (0.0, 0.4),
+    'SATURATION': (0.0, 1.0),
+    'VALUE': (0.5, 1.0),
+    'POWER': (450, 1200),
+    'x': (-4.0, 4.0),
+    'y': (-4.0, 4.0),
+    'z': (2.0, 7.0),
+    'SHADOW_FILTER_RANGE': (3, 6)
+}
+AREA_LOCATION = (0,0,5)            # Area light location
+AREA_SIZE = 5                      # Area light radius size
+AREA_ENERGY_RANGE = (50, 100)      # Area light watt energy range
+AREA_SHADOW_FILTER_RANGE = (1, 5)  # Area shadow filter range
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
-        surface_name, export_obj=False, n_samples=-1):
+        surface_name, export_only_objs=False, n_samples=-1):
         """Generate data by changing textures, scene and views"""
-        
-        # ----- General constants -----
-        VIEWS_PER_TEXTURE = 6       # Camera random views to render for each image
-        TOP_VIEWS_NUMBER = 2        # Number of view from max VIEWS_PER_TEXTURE to be only top views
-        
-        FRAME_NUMBER = 6            # Animation frame to generate
-        FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
-        HIDE_CRUMPLED = True        # Hide crumpled object when its removal is set
-        ORIGIN_WORLD_CENTER = True  # Set the target origin to the (0,0,0) (else the bbox center)
-        FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be the top left)
-        
-        # ----- Camera constants -----
-        FOCAL_LENGTH = 50                   # Focal length
-        PADDING_PERC = 0.3                  # The camera will not look to edges (1-padding)% away from the center
-        DIST_RADIUS_RANGE = (2.5, 7)        # Radius range in meters
-        SECTOR_ANGLE_RANGE = (0, math.pi/4) # Sector angle rangle to place camera at (math.pi/2 is the flat)
-        CAMERA_DEC_PLACES = 9               # Decimal places to round output camera data
-        TOP_VIEW_DISTANCE = (5.5, 7.5)      # Manually found out top-view camera distance [m] for landscape and portrait
-        TOP_VIEW_RND = (0.97, 1.2)          # The top view camera will deviate in given range of TOP_VIEW_DISTANCE 
-        TOP_VIEW_SECTOR_ANGLE_RANGE = (0, math.pi/10) # Sector range for the top view 
-
-        # ----- Crumpled plane constants -----
-        CRUMPLED_PLANE_CUTS_RANGE = (1, 10) # Subdivision cuts
-        CRUMPLE_FACTOR_RANGE = (0.20, 0.35) # Range to pick the max strengh (height [m]) of the peaks
-        REDUCTION_RANGE = (0.95, 1.25)      # Percentual reduction compared to the texture
-        PERC_DEFORMED_RANGE = (0.10, 0.60)  # Procentual amount of vertices to be randomly increased in Z
-        DISSOLVE_RANGE = (0.0, 0.25)        # Procentual amount of vertices to dissolve (retransforms faces)
-        
-        # ----- Target object constants -----
-        TARGET_OBJECT_CUTS = 128            # Subdivision cuts
-        HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
-        TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
-        
-        texture_material_props = {
-            'ROUGHNESS_RANGE': (0.45, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
-        }
-        
-        surface_material_props = {
-            'ROUGHNESS_RANGE': (0.2, 1.0),
-            'METALLIC_RANGE': (0.0, 0.3)
-        }
-        
-        physics_props = {
-            'CLOTH_QUALITY': 5,                 # Quality steps
-            'VERTEX_MASS': 0.5,                 # Vertex mass
-            'AIR_DAMPING': 1.0,                 # Air viscosity
-            'TENSION_STIFFNESS': 5000,          # Tension (stretching resistance)
-            'BENDING': 1000,                    # Bending
-            'COMPRESSION_STIFFNESS': 1000,      # Compression
-            'SHEAR_STIFFNESS': 1000,            # Shear
-            'COLLISION_QUALITY': 5,             # Collision quality
-            'MIN_COLLISION_DISTANCE': 0.01,     # Minimum distance for collisions
-            'GRAVITY': 10,                      # Gravity
-            'SPEED_MULTIPLIER': 1,              # Speed multiplier
-            'SMOOTH_FACTOR': 0.5,               # Smooth factor
-            'CORRECTIVE_SMOOTH_FACTOR': 1.0,    # Corrective smooth factor
-            'CORRECTIVE_SMOOTH_ITERATIONS': 10  # Corrective smooth repeat
-        }
-        
-        # ----- Light constants -----
-        main_light_props = {
-            'HUE': (0.0, 0.4),
-            'SATURATION': (0.0, 1.0),
-            'VALUE': (0.5, 1.0),
-            'POWER': (450, 1200),
-            'x': (-4.0, 4.0),
-            'y': (-4.0, 4.0),
-            'z': (2.0, 7.0),
-            'SHADOW_FILTER_RANGE': (3, 6)
-        }
-        AREA_LOCATION = (0,0,5)            # Area light location
-        AREA_SIZE = 5                      # Area light radius size
-        AREA_ENERGY_RANGE = (50, 100)      # Area light watt energy range
-        AREA_SHADOW_FILTER_RANGE = (1, 5) # Area shadow filter range
         
         # ----- Loading -----
         # Load steady objects
@@ -137,13 +145,15 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         cam = bpy.data.objects[cam_name]
         bpy.context.scene.camera = cam
         cam.data.lens = FOCAL_LENGTH
+        cam.data.dof.use_dof = True # Depth of field
+        cam.data.dof.aperture_fstop = 2 * 2.8
         
         # Get static surface nodes for materials
         nodes_surface, texture_node_surface = data_generation.set_material_nodes(surface_object, 'Surface_texture_material')
         
         # Get all target object texture file names and surface file names
         texture_names = sorted(os.listdir(textures_dir))
-        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(n_samples)]
+        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(n_samples + SKIP_TEXTURES)]
         
         surface_names = os.listdir(surfaces_dir)
         random.shuffle(surface_names)
@@ -265,12 +275,24 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 target_object.select_set(False)
                             
                 
-                # Export .obj files
-                if(export_obj):
+                # Export only .obj files
+                if(export_only_objs):
+                    # Exports objects that this function selects
                     export_scene_objects(OBJ_DIR, render_set, [target_object])
+                    
+                    # ----- Remove created lights -----
+                    for light_object in light_objects:
+                        bpy.data.objects.remove(light_object)
+                    bpy.ops.object.select_all(action='DESELECT')
+                    
+                    render_set += 1
+                    continue
+                
                 
                 # ----- Views and rendering -----
                 camera_info_list = []
+                render_dir_path = os.path.join(renders_dir, str(uuid.uuid4()))
+                    
                 # Change a camera view and render a result
                 for view_index in range(0, VIEWS_PER_TEXTURE):
                     # ----- Camera view positioning ------
@@ -303,23 +325,26 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     
                     # Change the camera look to the random point
                     data_generation.look_at(camera, Vector((point_x, point_y, 0)))
+                    camera.data.dof.focus_object = target_object
                     bpy.context.view_layer.update()
                     
                     
                     # ----- Rendering -----
                     str_view_index = f"{view_index:02d}"
+                    if not os.path.exists(render_dir_path):
+                        os.makedirs(render_dir_path)
                     
                     # Keep data for the save at the end of the render
                     data_row = [str_view_index, *data_generation.get_camera_info(cam, target_object, CAMERA_DEC_PLACES)]
                     camera_info_list.append(data_row)
                     
                     # Render the view
-                    render_path = os.path.join(renders_dir,
-                        f"set_{render_set:05d}_{texture_name_without_extension}_view_{str_view_index}." + RENDER_FORMAT.lower())
-                    data_generation.render_view(render_path)
+                    render_name = f"view_{str_view_index}." + RENDER_FORMAT.lower()
+                    render_img_path = os.path.join(render_dir_path, IMG_SUBDIR, render_name)
+                    data_generation.render_view(render_img_path)
                     
                     # Cast the rays from the camera to the target object's texture 
-                    ray_cast_and_export_maps(render_path.rsplit('.', 1)[0],
+                    ray_cast_and_export_maps(render_dir_path, render_name.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, flip_uv=FLIP_UV, visualize=False)
 
 
@@ -329,13 +354,12 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 bpy.ops.object.select_all(action='DESELECT') 
                 
                 # ----- Save data for cameras -----
-                info_data_path = os.path.join(renders_dir,
-                        f"set_{render_set:05d}_{texture_name_without_extension}_data.txt")
-                data_generation.save_camera_info(info_data_path, camera_info_list)
+                info_data_path = os.path.join(render_dir_path, f"data.txt")
+                head_data = f"{texture_name}\n"
+                data_generation.save_meta_info(info_data_path, head_data, camera_info_list)
                 
                 print(f"Views for {texture_name} rendered")
                 sys.stdout.flush()
-                render_set += 1
 
 
 def initialize_scene(surface_size):
@@ -354,7 +378,7 @@ def initialize_scene(surface_size):
         rotation_deg=(45, 0, 0))
 
 
-def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=False,
+def ray_cast_and_export_maps(render_dir_path, render_name, res_x=1920, res_y=1080, visualize=False,
     res_coef=1.0, flip_uv=False):
     """Call ray casting and export result per-pixel maps for UV and Z"""
     # Target object with the texture
@@ -370,13 +394,18 @@ def ray_cast_and_export_maps(file_path_name, res_x=1920, res_y=1080, visualize=F
         res_coef=res_coef, flip_uv=flip_uv, visualize=visualize)
     
     # If file path to the general name is set, save data
-    if(file_path_name):
+    if(render_dir_path):
         # Save UV map image
+        dir_file_path = os.path.join(render_dir_path, UV_SUBDIR)
+        render_path = os.path.join(dir_file_path, render_name + '_uv.' + MAPS_EXP_FORMAT)
         texture_ray_casting.get_uv_coords_map(outputs, res_x, res_y, res_coef,
-            file_path_name + '_uv.' + MAPS_EXP_FORMAT, color_depth=MAPS_EXP_DEPTH)
+            render_path, color_depth=MAPS_EXP_DEPTH)
+        
         # Save Z-buffer image
+        dir_file_path = os.path.join(render_dir_path, Z_SUBDIR)
+        render_path = os.path.join(dir_file_path, render_name + '_z.' + MAPS_EXP_FORMAT)
         texture_ray_casting.get_z_value_map(z_vals, res_x, res_y, res_coef,
-            file_path_name + '_z.' + MAPS_EXP_FORMAT, color_depth=MAPS_EXP_DEPTH)
+            render_path, color_depth=MAPS_EXP_DEPTH)
 
 
 def export_scene_objects(export_obj_path, render_set, objects):
@@ -409,11 +438,10 @@ if __name__ == "__main__":
     # Render settings
     bpy.context.scene.render.resolution_x = RES_X
     bpy.context.scene.render.resolution_y = RES_Y
-     
     bpy.context.scene.render.image_settings.file_format = RENDER_FORMAT
     bpy.context.scene.render.image_settings.color_depth = RENDER_COLOR_DEPTH
     bpy.context.scene.render.image_settings.compression = RENDER_COMPRESSION
-    bpy.context.scene.eevee.taa_samples = RENDER_SAMPLES
+    bpy.context.scene.eevee.taa_render_samples = RENDER_SAMPLES
     
     generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
-        SURFACE_OBJECT, export_obj=EXPORT_OBJ, n_samples=NUM_SAMPLES)
+        SURFACE_OBJECT, export_only_objs=EXPORT_ONLY_OBJS, n_samples=NUM_SAMPLES)

@@ -318,9 +318,10 @@ def look_at(camera_obj, target):
     camera_obj.rotation_quaternion = camera_obj.rotation_quaternion @ roll_quat
 
     
-def save_camera_info(info_data_path, camera_info_list):
+def save_meta_info(info_data_path, head_data, camera_info_list):
     """Writes ',' separated data to the file at info_data_path"""
     with open(info_data_path, 'w') as f:
+        f.write(head_data)
         for data_row in camera_info_list:
             f.write(','.join(map(str, data_row)) + '\n')
     
