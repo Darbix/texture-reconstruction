@@ -116,7 +116,7 @@ def set_material_nodes(target_object, target_material_name):
 
 
 def render_view(render_path):
-    """Renders a camera view to a file"""  
+    """Renders a camera view to a file"""
     bpy.context.scene.render.filepath = render_path
     bpy.ops.render.render(write_still=True)
 

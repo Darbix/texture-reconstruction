@@ -61,7 +61,7 @@ SKIP_TEXTURES = 0           # Skip first N textures to generate other
 
 
 # ----- General constants -----
-VIEWS_PER_TEXTURE = 30      # Camera random views to render for each image
+VIEWS_PER_TEXTURE = 5       # Camera random views to render for each image
 TOP_VIEWS_NUMBER = 5        # Number of view from max VIEWS_PER_TEXTURE to be only top views
 
 FRAME_NUMBER = 6            # Animation frame to generate
@@ -212,11 +212,11 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 
                 # ----- Surface settings -----
                 # Random surface texture select (the list is shuffled)
-                surface_name = surface_names.pop(0)
-                surface_names.append(surface_name)
+                surface_texture_name = surface_names.pop(0)
+                surface_names.append(surface_texture_name)
                 data_generation.adjust_surface(nodes_surface, surface_material_props)
                 
-                surface_path = os.path.join(surfaces_dir, surface_name)
+                surface_path = os.path.join(surfaces_dir, surface_texture_name)
                 texture_node_surface.image = bpy.data.images.load(surface_path)
                 
                 
@@ -273,7 +273,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 bpy.context.view_layer.objects.active = target_object
                 bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
                 target_object.select_set(False)
-                            
+                
                 
                 # Export only .obj files
                 if(export_only_objs):

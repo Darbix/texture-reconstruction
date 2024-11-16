@@ -108,11 +108,11 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visual
         outputs: 2D array of tuples with normalized camera pixels 
             mapped to texture coords (cam_x, cam_y, uv_x, uv_y)
     """
-    # Save the current view mode
-    mode = bpy.context.area.type
+    # # Save the current view mode
+    # mode = bpy.context.area.type
 
-    # Set view mode to 3D (makes variables available)
-    bpy.context.area.type = "VIEW_3D"
+    # # Set view mode to 3D (makes variables available)
+    # bpy.context.area.type = "VIEW_3D"
 
     # Get the camera plane frame
     # Relative to the camera center in world coordinates [m]
@@ -201,8 +201,8 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visual
         
         visualize_rays(values, cam)
         
-    # Reset a view mode
-    bpy.context.area.type = mode
+    # # Reset a view mode
+    # bpy.context.area.type = mode
     
     return outputs, z_vals
 
