@@ -4,6 +4,7 @@ import importlib
 import random
 import bmesh
 import uuid
+import time
 import math
 import bpy
 import sys
@@ -446,6 +447,8 @@ def define_render():
 random.seed(RANDOM_SEED)
 
 if __name__ == "__main__":
+    start_time = time.time()
+
     initialize_scene(surface_size=SURFACE_SIZE)
     
     if not os.path.exists(RENDERS_DIR):
@@ -463,3 +466,8 @@ if __name__ == "__main__":
     
     generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
         SURFACE_OBJECT, export_only_objs=EXPORT_ONLY_OBJS, n_samples=NUM_SAMPLES)
+    
+    elapsed_time_seconds = time.time() - start_time
+    hours, remainder = divmod(elapsed_time_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    print(f"Runtime: {int(hours):02}:{int(minutes):02}:{int(seconds):02}")
