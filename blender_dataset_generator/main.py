@@ -45,12 +45,14 @@ Z_SUBDIR = 'depth_imgs'
 NUM_SAMPLES = 1             # Max number of unique image sets to generate
 RENDER_FORMAT = 'PNG'       # Render image format
 RENDER_COLOR_DEPTH = '8'    # Render color depth
-RENDER_COMPRESSION = 0      # Render image compression (0-100)
-RENDER_SAMPLES = 64         # Number of the render samples
+RENDER_COMPRESSION = 75     # Render image compression (0-100)
+RENDER_ENGINE = 'EEVEE'     # CYCLES or EEVEE
+# Number of the render samples
+RENDER_SAMPLES = 256 if RENDER_ENGINE == 'CYCLES' else 64        
 
-RES_X = 1920                # Render resolution X
-RES_Y = 1080                # Render resolution Y
-RES_COEF = 0.05             # Resolution reduction (normalized num of rays to render)
+RES_X = 2560                # Render resolution X
+RES_Y = 1440                # Render resolution Y
+RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
 
 MAPS_EXP_FORMAT = 'exr'     # Format to generate UV and Z maps in (exr or png)
 MAPS_EXP_DEPTH = np.float16 # Color depth for UV and Z maps (png 8/16, exr 16/32)
@@ -61,8 +63,8 @@ SKIP_TEXTURES = 0           # Skip first N textures to generate other
 
 
 # ----- General constants -----
-VIEWS_PER_TEXTURE = 5       # Camera random views to render for each image
-TOP_VIEWS_NUMBER = 5        # Number of view from max VIEWS_PER_TEXTURE to be only top views
+VIEWS_PER_TEXTURE = 1       # Camera random views to render for each image
+TOP_VIEWS_NUMBER = 4        # Number of view from max VIEWS_PER_TEXTURE to be only top views
 
 FRAME_NUMBER = 6            # Animation frame to generate
 FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
@@ -93,11 +95,11 @@ HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
 TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
 
 texture_material_props = {
-    'ROUGHNESS_RANGE': (0.45, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
+    'ROUGHNESS_RANGE': (0.55, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
 }
 
 surface_material_props = {
-    'ROUGHNESS_RANGE': (0.2, 1.0),
+    'ROUGHNESS_RANGE': (0.35, 1.0),
     'METALLIC_RANGE': (0.0, 0.3)
 }
 
@@ -123,20 +125,20 @@ main_light_props = {
     'HUE': (0.0, 0.4),
     'SATURATION': (0.0, 1.0),
     'VALUE': (0.5, 1.0),
-    'POWER': (450, 1200),
+    'POWER': (450, 1100),
     'x': (-4.0, 4.0),
     'y': (-4.0, 4.0),
-    'z': (2.0, 7.0),
+    'z': (3.0, 7.0),
     'SHADOW_FILTER_RANGE': (3, 6)
 }
-AREA_LOCATION = (0,0,5)            # Area light location
-AREA_SIZE = 5                      # Area light radius size
-AREA_ENERGY_RANGE = (50, 100)      # Area light watt energy range
+AREA_LOCATION = (0, 0, 6)          # Area light location
+AREA_SIZE = 6                      # Area light radius size
+AREA_ENERGY_RANGE = (70, 130)      # Area light watt energy range
 AREA_SHADOW_FILTER_RANGE = (1, 5)  # Area shadow filter range
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
-        surface_name, export_only_objs=False, n_samples=-1):
+        surface_name, export_only_objs=False, n_samples=1):
         """Generate data by changing textures, scene and views"""
         
         # ----- Loading -----
@@ -146,14 +148,15 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         bpy.context.scene.camera = cam
         cam.data.lens = FOCAL_LENGTH
         cam.data.dof.use_dof = True # Depth of field
-        cam.data.dof.aperture_fstop = 2 * 2.8
+        cam.data.dof.aperture_fstop = 16
         
         # Get static surface nodes for materials
         nodes_surface, texture_node_surface = data_generation.set_material_nodes(surface_object, 'Surface_texture_material')
         
         # Get all target object texture file names and surface file names
         texture_names = sorted(os.listdir(textures_dir))
-        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(n_samples + SKIP_TEXTURES)]
+        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(SKIP_TEXTURES + n_samples)]
+        cyclic_texture_names = cyclic_texture_names[SKIP_TEXTURES:SKIP_TEXTURES + n_samples]
         
         surface_names = os.listdir(surfaces_dir)
         random.shuffle(surface_names)
@@ -423,6 +426,21 @@ def export_scene_objects(export_obj_path, render_set, objects):
     
     bpy.ops.object.select_all(action='DESELECT')
 
+def define_render():
+    if(RENDER_ENGINE == 'CYCLES'):
+        bpy.context.scene.render.engine = 'CYCLES'
+        bpy.context.scene.cycles.samples = RENDER_SAMPLES
+        # Blender preferences -> System -> CUDA
+        bpy.context.preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'  # Use 'OPTIX' for RTX GPUs, or 'OPENCL' for AMD GPUs
+        bpy.context.scene.cycles.device = 'GPU'
+        # Select the first GPU device
+        device = bpy.context.preferences.addons['cycles'].preferences.devices[0]
+        device.use = True
+        print(f"Device: {device.name} is used")
+    else:
+        bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+        bpy.context.scene.eevee.taa_render_samples = RENDER_SAMPLES
+
 
 
 random.seed(RANDOM_SEED)
@@ -441,7 +459,7 @@ if __name__ == "__main__":
     bpy.context.scene.render.image_settings.file_format = RENDER_FORMAT
     bpy.context.scene.render.image_settings.color_depth = RENDER_COLOR_DEPTH
     bpy.context.scene.render.image_settings.compression = RENDER_COMPRESSION
-    bpy.context.scene.eevee.taa_render_samples = RENDER_SAMPLES
+    define_render()
     
     generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
         SURFACE_OBJECT, export_only_objs=EXPORT_ONLY_OBJS, n_samples=NUM_SAMPLES)
