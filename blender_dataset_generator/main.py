@@ -1,6 +1,7 @@
 from mathutils import Vector
 import numpy as np
 import importlib
+import argparse
 import random
 import bmesh
 import uuid
@@ -139,7 +140,7 @@ AREA_SHADOW_FILTER_RANGE = (1, 5)  # Area shadow filter range
 
 
 def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name,
-        surface_name, export_only_objs=False, n_samples=1):
+        surface_name, export_only_objs=False, n_samples=1, n_skip=0):
         """Generate data by changing textures, scene and views"""
         
         # ----- Loading -----
@@ -156,8 +157,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         
         # Get all target object texture file names and surface file names
         texture_names = sorted(os.listdir(textures_dir))
-        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(SKIP_TEXTURES + n_samples)]
-        cyclic_texture_names = cyclic_texture_names[SKIP_TEXTURES:SKIP_TEXTURES + n_samples]
+        cyclic_texture_names = [texture_names[i % len(texture_names)] for i in range(n_skip + n_samples)]
+        cyclic_texture_names = cyclic_texture_names[n_skip:n_skip + n_samples]
         
         surface_names = os.listdir(surfaces_dir)
         random.shuffle(surface_names)
@@ -448,6 +449,24 @@ random.seed(RANDOM_SEED)
 
 if __name__ == "__main__":
     start_time = time.time()
+    
+    # Argument parsing
+    if "--" in sys.argv:
+        idx = sys.argv.index("--")
+        # Arguments after '--'
+        script_args = sys.argv[idx + 1:]
+    else:
+        script_args = []
+
+    # Set up argument parsing
+    parser = argparse.ArgumentParser(description="Process Blender script arguments.")
+    parser.add_argument('--n_samples', type=int, help="Number of texture data samples.")
+    parser.add_argument('--n_skip', type=int, help="Number of texture images to skip.")
+    args = parser.parse_args(script_args)
+    
+    n_samples = args.n_samples if args.n_samples is not None else NUM_SAMPLES
+    n_skip = args.n_skip if args.n_skip is not None else SKIP_TEXTURES
+    
 
     initialize_scene(surface_size=SURFACE_SIZE)
     
@@ -465,7 +484,7 @@ if __name__ == "__main__":
     define_render()
     
     generate_data(TEXTURES_DIR, RENDERS_DIR, SURFACES_DIR, MAIN_CAMERA, TARGET_OBJECT,
-        SURFACE_OBJECT, export_only_objs=EXPORT_ONLY_OBJS, n_samples=NUM_SAMPLES)
+        SURFACE_OBJECT, export_only_objs=EXPORT_ONLY_OBJS, n_samples=n_samples, n_skip=n_skip)
     
     elapsed_time_seconds = time.time() - start_time
     hours, remainder = divmod(elapsed_time_seconds, 3600)
