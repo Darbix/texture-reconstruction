@@ -47,6 +47,9 @@ def set_target_object_modifiers(obj, mass=0.005, quality=5):
 
 # Create a background object with collision physics
 def create_background_object(name, dimensions=(5, 5, 0), location=(0, 0, 0)):
+    if bpy.data.objects.get(name):
+        bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
+
     bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=False, location=location)
     background_object = bpy.context.object
     background_object.name = name

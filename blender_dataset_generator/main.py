@@ -11,6 +11,7 @@ import bpy
 import sys
 import os
 
+
 # Absolute path to the project directory (can be set manually)
 abs_curr_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else os.getcwd()
 
@@ -47,7 +48,7 @@ Z_SUBDIR = 'depth_imgs'
 NUM_SAMPLES = 1             # Max number of unique image sets to generate
 RENDER_FORMAT = 'PNG'       # Render image format
 RENDER_COLOR_DEPTH = '8'    # Render color depth
-RENDER_COMPRESSION = 75     # Render image compression (0-100)
+RENDER_COMPRESSION = 15     # Render image compression (0-100)
 RENDER_ENGINE = 'EEVEE'     # CYCLES or EEVEE
 # Number of the render samples
 RENDER_SAMPLES = 256 if RENDER_ENGINE == 'CYCLES' else 64        
@@ -65,7 +66,7 @@ SKIP_TEXTURES = 0           # Skip first N textures to generate other
 
 
 # ----- General constants -----
-VIEWS_PER_TEXTURE = 1       # Camera random views to render for each image
+VIEWS_PER_TEXTURE = 30      # Camera random views to render for each image
 TOP_VIEWS_NUMBER = 4        # Number of view from max VIEWS_PER_TEXTURE to be only top views
 
 FRAME_NUMBER = 6            # Animation frame to generate
@@ -77,10 +78,10 @@ FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be 
 # ----- Camera properties -----
 FOCAL_LENGTH = 50                     # Focal length
 PADDING_PERC = 0.20                   # The camera will not look to edges (1-padding)% away from the center
-DIST_RADIUS_RANGE = (1.7, 6)          # Radius range in meters
-SECTOR_ANGLE_RANGE = (0, math.pi/3.3) # Sector angle rangle to place camera at (math.pi/2 is the flat)
+DIST_RADIUS_RANGE = (1.7, 3)          # Radius range in meters
+SECTOR_ANGLE_RANGE = (0, math.pi/4.2) # Sector angle rangle to place camera at (math.pi/2 is the flat)
 CAMERA_DEC_PLACES = 9                 # Decimal places to round output camera data
-TOP_VIEW_DISTANCE = (5.5, 7.5)        # Manually found out top-view camera distance [m] for landscape and portrait
+TOP_VIEW_DISTANCE = (6.9, 7.5)        # Manually found out top-view camera distance [m] for landscape and portrait
 TOP_VIEW_RND = (0.97, 1.2)            # The top view camera will deviate in given range of TOP_VIEW_DISTANCE 
 TOP_VIEW_SECTOR_ANGLE_RANGE = (0, math.pi/9) # Sector range for the top view 
 
@@ -161,7 +162,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         cyclic_texture_names = cyclic_texture_names[n_skip:n_skip + n_samples]
         
         surface_names = os.listdir(surfaces_dir)
-        random.shuffle(surface_names)
+#        random.shuffle(surface_names)
         
         
         render_set = 0 # Identificator number for the particular data collection
@@ -213,7 +214,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     cuts_range=CRUMPLED_PLANE_CUTS_RANGE, crumple_factor=CRUMPLE_FACTOR,
                     perc_deformed_range=PERC_DEFORMED_RANGE, dissolve_range=DISSOLVE_RANGE)
                 crumpled_object.hide_render = True
-
+                
                 
                 # ----- Surface settings -----
                 # Random surface texture select (the list is shuffled)
@@ -239,7 +240,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # Remove the collision crumpled object at the specific frame
                 # Using this the target falls a bit under to touch the background plane
                 scene_init.setup_collision_removal_handler(crumpled_object, FRAME_REMOVE_CRUMPLED, HIDE_CRUMPLED, FRAME_NUMBER)
-
+                
                 cloth_modifier.point_cache.frame_start = 1
                 cloth_modifier.point_cache.frame_end = FRAME_NUMBER
                 # Bake and shift the animation to a random frame
@@ -297,7 +298,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # ----- Views and rendering -----
                 camera_info_list = []
                 render_dir_path = os.path.join(renders_dir, str(uuid.uuid4()))
-                    
+            
                 # Change a camera view and render a result
                 for view_index in range(0, VIEWS_PER_TEXTURE):
                     # ----- Camera view positioning ------
@@ -330,7 +331,10 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     
                     # Change the camera look to the random point
                     data_generation.look_at(camera, Vector((point_x, point_y, 0)))
-                    camera.data.dof.focus_object = target_object
+                    # Causes error
+                    # camera.data.dof.focus_object = target_object
+                    distance_cam_target = (camera.location - Vector((point_x, point_y, 0))).length
+                    camera.data.dof.focus_distance = distance_cam_target
                     bpy.context.view_layer.update()
                     
                     
@@ -347,6 +351,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     render_name = f"view_{str_view_index}." + RENDER_FORMAT.lower()
                     render_img_path = os.path.join(render_dir_path, IMG_SUBDIR, render_name)
                     data_generation.render_view(render_img_path)
+                    camera.data.dof.focus_object = None
                     
                     # Cast the rays from the camera to the target object's texture 
                     ray_cast_and_export_maps(render_dir_path, render_name.rsplit('.', 1)[0],
