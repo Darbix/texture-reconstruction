@@ -5,17 +5,12 @@ import bmesh
 import os
 
 
-def convert_local_to_texture(obj, face_index, local_coords):
+def convert_local_to_texture(obj, face_index, local_coords, mesh):
     """
     Converts local object's coordinates to UV texture coordinates for the specified face.
     Weightens UV face by local_coords position in the vertex face square.  
     """
-    # Access the mesh data in its current evaluated state
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    evaluated_obj = obj.evaluated_get(depsgraph)
-
-    # Get the deformed mesh data and the active UV layer
-    mesh = evaluated_obj.data
+    # Get the active UV layer
     uv_layer = mesh.uv_layers.active.data
 
     # Retrieve the polygon corresponding to the given face index
@@ -108,11 +103,6 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visual
         outputs: 2D array of tuples with normalized camera pixels 
             mapped to texture coords (cam_x, cam_y, uv_x, uv_y)
     """
-    # # Save the current view mode
-    # mode = bpy.context.area.type
-
-    # # Set view mode to 3D (makes variables available)
-    # bpy.context.area.type = "VIEW_3D"
 
     # Get the camera plane frame
     # Relative to the camera center in world coordinates [m]
@@ -148,11 +138,18 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visual
     matrix_world = target_object.matrix_world
     # World space to target object local space
     matrix_world_inverted = matrix_world.inverted()
+    matrix_cam_quat = cam.matrix_world.to_quaternion()
     # The origin of rays (the camera center) relative to the target local space scale
     origin = matrix_world_inverted @ cam.matrix_world.translation
 
     # Flips the UV coordination coord -> 1-coord if needed
     get_uv_coord = (lambda c: 1 - c[1]) if flip_uv else (lambda c: c)
+
+    # Variables for convert_local_to_texture()
+    # Access the mesh data in its current evaluated state for mesh
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated_obj = target_object.evaluated_get(depsgraph)
+    mesh = evaluated_obj.data
 
     # iterate over all x, y coordinates (vectors from the camera center to its plane pixels) 
     for ix, ray_rel_x in enumerate(ray_range_x):
@@ -160,19 +157,19 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visual
             # Get the current pixel vector
             pixel_vector = Vector((ray_rel_x, ray_rel_y, cam_view_rel_z))
             # Rotate that vector according to a camera rotation
-            pixel_vector.rotate(cam.matrix_world.to_quaternion())
+            pixel_vector.rotate(matrix_cam_quat)
             # Convert the world space ray vector to the target object space
             destination = matrix_world_inverted @ (pixel_vector + cam.matrix_world.translation) 
             direction = (destination - origin).normalized()
             
-            # Ray casting (in the target object space)
+            # Ray casting (in the target object space) limited to max distance 10 m 
             # Note: takes the second most execution time
-            hit, location, norm, face_index = target_object.ray_cast(origin, direction)
+            hit, location, norm, face_index = target_object.ray_cast(origin, direction, distance=10.0)
 
             if hit:
                 # Normalized texture coordinates (averaged by polygon vertices)
-                # Note takes the most execution time
-                texture_coords = convert_local_to_texture(target_object, face_index, location)
+                # Note: takes the most execution time
+                texture_coords = convert_local_to_texture(target_object, face_index, location, mesh)
 
                 # Store world space hits for ray visualization
                 world_coords = (matrix_world @ location)
@@ -200,9 +197,6 @@ def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visual
                     draw_point_in_local_space(target_object, loc)       
         
         visualize_rays(values, cam)
-        
-    # # Reset a view mode
-    # bpy.context.area.type = mode
     
     return outputs, z_vals
 

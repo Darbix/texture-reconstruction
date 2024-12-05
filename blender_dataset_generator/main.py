@@ -55,18 +55,18 @@ RENDER_SAMPLES = 256 if RENDER_ENGINE == 'CYCLES' else 64
 
 RES_X = 2560                # Render resolution X
 RES_Y = 1440                # Render resolution Y
-RES_COEF = 1.00             # Resolution reduction (normalized num of rays to render)
+RES_COEF = .65              # Resolution reduction (normalized num of rays to render)
 
 MAPS_EXP_FORMAT = 'exr'     # Format to generate UV and Z maps in (exr or png)
 MAPS_EXP_DEPTH = np.float16 # Color depth for UV and Z maps (png 8/16, exr 16/32)
 EXPORT_ONLY_OBJS = False    # Bool to generate .obj objects
-SURFACE_SIZE = 10           # Constant background surface size in meters
+SURFACE_SIZE = 9            # Constant background surface size in meters
 RANDOM_SEED = None          # Random seed to keep some properties the same
 SKIP_TEXTURES = 0           # Skip first N textures to generate other
 
 
 # ----- General constants -----
-VIEWS_PER_TEXTURE = 30      # Camera random views to render for each image
+VIEWS_PER_TEXTURE = 1      # Camera random views to render for each image
 TOP_VIEWS_NUMBER = 4        # Number of view from max VIEWS_PER_TEXTURE to be only top views
 
 FRAME_NUMBER = 6            # Animation frame to generate
@@ -78,7 +78,7 @@ FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be 
 # ----- Camera properties -----
 FOCAL_LENGTH = 50                     # Focal length
 PADDING_PERC = 0.20                   # The camera will not look to edges (1-padding)% away from the center
-DIST_RADIUS_RANGE = (1.7, 3)          # Radius range in meters
+DIST_RADIUS_RANGE = (1.7, 2.3)        # Radius range in meters
 SECTOR_ANGLE_RANGE = (0, math.pi/4.2) # Sector angle rangle to place camera at (math.pi/2 is the flat)
 CAMERA_DEC_PLACES = 9                 # Decimal places to round output camera data
 TOP_VIEW_DISTANCE = (6.9, 7.5)        # Manually found out top-view camera distance [m] for landscape and portrait
@@ -98,7 +98,7 @@ HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
 TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
 
 texture_material_props = {
-    'ROUGHNESS_RANGE': (0.55, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
+    'ROUGHNESS_RANGE': (0.75, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
 }
 
 surface_material_props = {
@@ -134,9 +134,9 @@ main_light_props = {
     'z': (3.0, 7.0),
     'SHADOW_FILTER_RANGE': (3, 6)
 }
-AREA_LOCATION = (0, 0, 6)          # Area light location
-AREA_SIZE = 6                      # Area light radius size
-AREA_ENERGY_RANGE = (70, 130)      # Area light watt energy range
+AREA_LOCATION = (0, 0, 8)          # Area light location
+AREA_SIZE = 8                      # Area light radius size
+AREA_ENERGY_RANGE = (100, 180)      # Area light watt energy range
 AREA_SHADOW_FILTER_RANGE = (1, 5)  # Area shadow filter range
 
 
