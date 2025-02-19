@@ -8,9 +8,9 @@
 git clone https://github.com/princeton-vl/SEA-RAFT.git
 
 # Step 2: Install dependencies from SEA-RAFT's requirements
-pip install -r SEA-RAFT/requirements.txt
+python -m pip install -r SEA-RAFT/requirements.txt
 
 # Step 3: Install dependencies from the current repository's requirements
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 echo "Setup complete!"
