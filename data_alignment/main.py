@@ -4,6 +4,7 @@ import cv2
 import torch
 import shutil
 import argparse
+from itertools import islice
 
 from image_utils import load_data_iteratively, save_img, plot_image
 from align_by_uv_mapping import align_image_uv
@@ -16,8 +17,8 @@ DATA_INFO_FILE = "data.txt"  # Name of a file with a source texture name
 DATA_INFO_KEY = "data_txt"   # A directory key for DATA_INFO_FILE
 
 
-# Argument parser
 def parse_arguments():
+    """Argument parser"""
     parser = argparse.ArgumentParser(description="Process input arguments.")
     parser.add_argument("--data_path", type=str,
         help="Path to the input dataset")
@@ -35,8 +36,21 @@ def parse_arguments():
         help="Mask out alpha channels using UV data (remove a background)")
     parser.add_argument("--uv_upscale", type=float, default=1.5,
         help="UV map upscale factor compared to the texture size for UV mapping")
-    
+    parser.add_argument("--range", type=parse_range, required=True, 
+                        help="Specify range as 'start:stop' (e.g., 50:100)")
+
     return parser.parse_args()
+
+
+def parse_range(range_str):
+    """Parses a range string like '50:100' into (start, stop) integers."""
+    try:
+        if(range_str is None):
+            return None
+        start, stop = map(int, range_str.split(":"))
+        return start, stop
+    except ValueError:
+        raise argparse.ArgumentTypeError("Range must be in 'start:stop' (with meaning data[start:stop]) format with integers.")
 
 
 if __name__ == "__main__":
@@ -44,6 +58,13 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     DATA_PATH = args.data_path
+    try:
+        data_range = args.range#ap(int, args.range.split(":")) # Range of loaded data
+    except Exception as e:
+        print(e)
+        exit(1)
+    start, stop = data_range if data_range is not None else (0, -1)
+
     TEXTURE_PATH = args.texture_path
     OUTPUT_PATH = args.output_path
     TOGGLE_UV_OR_HGOF = 'HGOF' if args.hgof else 'UV'
@@ -58,10 +79,20 @@ if __name__ == "__main__":
     # Initialization
     # Optical flow SEA-RAFT model
     settings = Settings(iterations=OF_ITERS, img_max_size=OF_MAX_SIZE)
-    model, args = init_searaft(settings)
+    model, model_args = init_searaft(settings) if TOGGLE_UV_OR_HGOF == 'HGOF' else (None, None)
+    
+    # Load pairs of scenes and dictionaries of files
+    data_iter = load_data_iteratively(DATA_PATH, VIEW_IMGS_DIR, UV_IMGS_DIR,
+                                      DATA_INFO_FILE, DATA_INFO_KEY)
+    try:
+        if(start > stop and stop != -1 or start == stop or start < 0 or stop < -1):
+            raise ValueError(f"An invalid data range given:", start, stop)
+        sliced_data = list(islice(data_iter, start, stop if stop > 0 else None))
+    except Exception as e:
+        print(e)
+        exit(1)
 
-    for scene, files in load_data_iteratively(DATA_PATH, VIEW_IMGS_DIR,
-        UV_IMGS_DIR, DATA_INFO_FILE, DATA_INFO_KEY):
+    for scene, files in sliced_data:
         print(f"Scene: {scene}")
 
         max_image_shape = None # Maximal size of the output image
@@ -136,7 +167,7 @@ if __name__ == "__main__":
                 print("   Image: ", view_img_path)
                 print("   UV img:", uv_img_path)
 
-                aligned_img = align_image_hg_of(model, args, ref_view_img,
+                aligned_img = align_image_hg_of(model, model_args, ref_view_img,
                                                 view_img_path, uv_img_path,
                                                 mask_object=MASK_OBJECT)
 

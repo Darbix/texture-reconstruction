@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 def load_data_iteratively(data_path, VIEW_IMGS_DIR, UV_IMGS_DIR, DATA_INFO_FILE,
     DATA_INFO_KEY):
     """Loads file paths for each data set scene by scene"""
-    for scene in os.listdir(data_path):
+    for scene in sorted(os.listdir(data_path)):
         # Path to UID specific set of data views
         scene_path = os.path.join(data_path, scene)
         if not os.path.isdir(scene_path):

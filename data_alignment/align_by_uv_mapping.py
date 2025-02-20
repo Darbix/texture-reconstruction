@@ -28,8 +28,10 @@ def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=
     uv_upsample_factor = uv_upscale_factor
     max_size_upsampled = int(max_size * uv_upsample_factor)
 
-    view_img_resized = resize_image(view_img_cropped, max_size_upsampled)
-    uv_img_resized = resize_image(uv_img_cropped.astype(np.float32), max_size_upsampled)
+    view_img_resized = resize_image(view_img_cropped, max_size_upsampled,
+                                    interpolation=cv2.INTER_CUBIC)
+    uv_img_resized = resize_image(uv_img_cropped.astype(np.float32), max_size_upsampled,
+                                  interpolation=cv2.INTER_CUBIC)
 
     # Visualization of the cropped and resized UV map
     # plt.imshow((uv_img_resized * 255).astype(np.uint8))
