@@ -107,67 +107,6 @@ def attach_tiles_to_images(
     return composed_image
 
 
-
-
-# # TODO export batch, image sizes and process 1 image, not 3
-# def attach_tiles_to_images(
-#         rnd_lr_img, rnd_sr_img, rnd_hr_img, img_size=None,
-#         b_lr_imgs=None, tile_size=None, b_sr_img_tile=None,
-#         b_hr_texture=None, tile_x=None, tile_y=None,
-#         sample_n=0):
-#     """
-#     Adds a tile from the LR and SR batch images to the final ones
-#     at the specified location and also selects the corresponding HR texture.
-
-#     Parameters:
-#     - rnd_lr_img: Current LR image to update.
-#     - rnd_sr_img: Current SR image to update.
-#     - rnd_hr_img: Current HR image with the selected nth scene target texture.
-#     - all_indices: Tile indices (pairs) for the batch.
-#     - b_lr_imgs: Batch of LR tiles.
-#     - tile_size: Size of a tile.
-#     - b_sr_img_tile: Batch of SR tiles (crops at a single tile position).
-#     - b_hr_texture: Batch of HR textures.
-#     - tile_x, tile_y: Position of the tile.
-#     - sample_n: Index for the sample from the batch to select.
-
-#     Returns:
-#     - Updated rnd_lr_img, rnd_sr_img, and rnd_hr_img.
-#     """
-
-#     # Compute the full input image size based on tile positions and tile size
-#     input_img_size = (b_lr_imgs.shape[2], img_size[0], img_size[1]) # [C, H, W]
-#     # Compute the SR model scaling factor
-#     sr_factor = b_sr_img_tile.shape[3] / b_lr_imgs.shape[4]
-#     # Get the real SR output image size using the enlargement factor
-#     sr_img_size = (b_sr_img_tile.shape[1],              # C
-#                     int(input_img_size[1] * sr_factor), # H
-#                     int(input_img_size[2] * sr_factor)) # W
-
-#     # Init images if it's the first tile
-#     if(rnd_sr_img is None and rnd_lr_img is None):
-#         # Init images in original shapes
-#         rnd_sr_img = np.zeros((sr_img_size[1], sr_img_size[2], sr_img_size[0]))
-#         rnd_lr_img = np.zeros((input_img_size[1], input_img_size[2], input_img_size[0]))
-#         rnd_hr_img = np.zeros((sr_img_size[1], sr_img_size[2], sr_img_size[0]))
-
-#     # Add a current tile to the composed SR image
-#     rnd_sr_img_tile = b_sr_img_tile[sample_n].cpu().detach().numpy().transpose(1, 2, 0)
-#     rnd_sr_img[tile_y:tile_y + tile_size, tile_x:tile_x + tile_size, :] = rnd_sr_img_tile
-
-#     # Add a current tile to the composed HR image
-#     rnd_hr_img_tile = b_hr_texture[sample_n].cpu().detach().numpy().transpose(1, 2, 0)
-#     rnd_hr_img[tile_y:tile_y + tile_size, tile_x:tile_x + tile_size, :] = rnd_hr_img_tile
-
-#     # Add a current tile (of a first view) to the composed LR image
-#     rnd_lr_img_tile = b_lr_imgs[sample_n][0].cpu().detach().numpy().transpose(1, 2, 0)
-#     rnd_lr_img[tile_y:tile_y + tile_size, tile_x:tile_x + tile_size, :] = rnd_lr_img_tile
-
-#     return rnd_lr_img, rnd_sr_img, rnd_hr_img
-
-
-
-
 def plot_epoch_images(lr_img, sr_img, hr_img, output_file_path, path_individuals=""):
     """Plot first MVTRN input reference view, output texture and target one"""
 
@@ -200,33 +139,12 @@ def plot_epoch_images(lr_img, sr_img, hr_img, output_file_path, path_individuals
     return
 
 
-# def get_transform(resolution=None):
-#     """Creates a composed data transformation"""
-#     # Convert to square shape
-#     transforms = [PaddingToSquare(fill=(0, 0, 0, 0))]
-#     # Resize if required
-#     if resolution is not None:
-#         transforms.append(T.Resize((resolution, resolution), interpolation=InterpolationMode.BICUBIC))
-#     transforms.extend([
-#         T.ToTensor(),
-#         # Normalize to [-1, 1]
-#         T.Normalize(mean=[0.5, 0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5, 0.5]),
-#     ])
-
-#     return T.Compose(transforms)
-
-
 def resize_max_side(image, max_size):
     """Lambda transform to resize the longer side and keep the aspect ratio"""
     w, h = image.size
     scale = max_size / max(w, h)  # Scale factor for the longer side
     new_w, new_h = int(w * scale), int(h * scale)
     return image.resize((new_w, new_h), Image.BICUBIC)
-
-
-
-
-
 
 
 # Uses a cache for loading a test sample in cropped tiles

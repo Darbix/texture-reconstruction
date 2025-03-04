@@ -1,6 +1,7 @@
 # dataset.py
 
 import os
+import random
 from PIL import Image
 
 import torch
@@ -17,7 +18,8 @@ class MultiViewDataset(Dataset):
     """Dataset loader with worker caching and parallelization"""
     def __init__(self, data_path, transform_view=None, transform_texture=None,
                  transform_tile=None, tile_size=256, tile_stride=None,
-                 n=-1, s=-1, input_max_res=None, num_workers=1, max_workers_loading=1):
+                 n=-1, s=-1, input_max_res=None, num_workers=1,
+                 max_workers_loading=1, split_ratio=0.8, train=True):
 
         # Only one scene is loaded per worker
         self.worker_cache = {}
@@ -37,6 +39,14 @@ class MultiViewDataset(Dataset):
 
         self.scene_dirs = sorted([d for d in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, d))])
         self.scene_dirs = self.scene_dirs[:self.s] if self.s > 0 else self.scene_dirs
+        # ----- Dataset split -----
+        random.shuffle(self.scene_dirs)
+        split_index = int(len(self.scene_dirs) * split_ratio)
+        if train:
+            self.scene_dirs = self.scene_dirs[:split_index]
+        else:
+            self.scene_dirs = self.scene_dirs[split_index:]
+        # -------------------------
         self.scene_paths = [os.path.join(data_path, d) for d in self.scene_dirs]
 
         # Get complex data for all tiles
@@ -48,6 +58,7 @@ class MultiViewDataset(Dataset):
 
         # Split to num_workers parts indexed by IDs of workers
         self.scene_tile_indices = split_list(self.scene_tile_indices, self.num_workers)
+        # TODO
         print([len(p) for p in self.scene_tile_indices])
 
         self.print_lock = Lock()
@@ -133,7 +144,6 @@ class MultiViewDataset(Dataset):
         return view_tiles, texture_tile, tile
 
     def __len__(self):
-        # return len(self.scene_tile_indices)
         return sum(len(part) for part in self.scene_tile_indices)
 
     def num_of_scenes(self):

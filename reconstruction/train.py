@@ -48,9 +48,28 @@ def parse_args():
     return parser.parse_args()
 
 
-def train_mvtrn(model, dataloader, criterion, optimizer, device, num_epochs=10,
-                start_epoch=0, loss_hist=[], output_dir="", tile_size=256,
-                num_scenes=None):
+def evaluate(model, dataloader, criterion, device):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for batch_idx, (b_lr_imgs, b_hr_texture_tile, b_s_tile) in enumerate(dataloader):
+            b_lr_imgs = b_lr_imgs.to(device, non_blocking=True)
+            b_hr_texture_tile = b_hr_texture_tile.to(device, non_blocking=True)
+
+            b_sr_img_tile = model(b_lr_imgs)
+            tile_loss = criterion(b_sr_img_tile, b_hr_texture_tile)
+
+            total_loss += tile_loss.item()
+
+    avg_loss = total_loss / len(dataloader)
+    return avg_loss
+
+
+def train_mvtrn(
+    model, train_dataloader, val_dataloader, criterion, optimizer,
+    device, num_epochs=10, start_epoch=0, loss_hist=[], output_dir="",
+    tile_size=256, num_scenes=None):
+    
     """Train loop for the MVTRN model training"""
     
     model = model.to(device)
@@ -72,7 +91,7 @@ def train_mvtrn(model, dataloader, criterion, optimizer, device, num_epochs=10,
         # S<H,W>: GT texture height and width (resized to the model output size)
         # S: scene index, T<Y,X>: tile pixel position in the input image, T: num of scene tiles,
         # PH: original input height with padding, PW: original input width with padding
-        for batch_idx, (b_lr_imgs, b_hr_texture_tile, b_s_tile) in enumerate(dataloader):
+        for batch_idx, (b_lr_imgs, b_hr_texture_tile, b_s_tile) in enumerate(train_dataloader):
             optimizer.zero_grad()
             tile_loss = 0
 
@@ -128,10 +147,10 @@ def train_mvtrn(model, dataloader, criterion, optimizer, device, num_epochs=10,
         # Time run yet in minutes
         curr_run_time = (time.time() - start_time) / 60
         print(f"Epoch [{epoch+1}/{start_epoch + num_epochs}],",
-              f"Loss: {epoch_loss / len(dataloader):.6f},",
+              f"Loss: {epoch_loss / len(train_dataloader):.6f},",
               f"Time taken: {curr_run_time:.1f} minutes")
 
-        loss_hist.append(epoch_loss / len(dataloader))
+        loss_hist.append(epoch_loss / len(train_dataloader))
 
         # Save checkpoint every EPOCH_LOG_INTERVAL epochs and plot a random sample
         if(epoch + 1) % EPOCH_LOG_INTERVAL == 0:
@@ -142,13 +161,16 @@ def train_mvtrn(model, dataloader, criterion, optimizer, device, num_epochs=10,
             sample_plot_path = os.path.join(output_dir, f'plot_epoch_{epoch + 1}.png')
             plot_epoch_images(rnd_lr_img, rnd_sr_img, rnd_hr_img, sample_plot_path)
             print(f"Sample plot saved to {sample_plot_path}")
-
+        
+        if (epoch + 1) % 5 == 0:
+            print(f"Evaluation on validation dataset at epoch {epoch + 1}")
+            val_loss = evaluate(model, val_dataloader, criterion, device)
+            print(f"Validation loss: {val_loss:.6f}")
     return loss_hist
 
 
 
 if __name__ == "__main__":
-    print("hi")
     args = parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -166,19 +188,30 @@ if __name__ == "__main__":
 
 
     print("Loading data from:", args.data_path)
-    # Load the dataset using the new MultiViewDataset
-    dataset = MultiViewDataset(data_path=args.data_path,
-                               transform_view=transform_view,
-                               transform_texture=transform_texture,
-                               transform_tile=transform_tile,
-                               n=args.num_views, tile_size=args.tile_size,
-                               s=args.num_scenes, tile_stride=args.tile_stride,
-                               input_max_res=args.input_resolution,
-                               num_workers=args.num_workers,
-                               max_workers_loading=args.max_workers_loading)
+    # ----- Load train and val datasets -----
+    train_dataset = MultiViewDataset(
+        data_path=args.data_path, transform_view=transform_view,
+        transform_texture=transform_texture, transform_tile=transform_tile,
+        n=args.num_views, tile_size=args.tile_size, s=args.num_scenes,
+        tile_stride=args.tile_stride, input_max_res=args.input_resolution,
+        num_workers=args.num_workers, max_workers_loading=args.max_workers_loading,
+        split_ratio=0.8, train=True)
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    val_dataset = MultiViewDataset(
+        data_path=args.data_path, transform_view=transform_view,
+        transform_texture=transform_texture, transform_tile=transform_tile,
+        n=args.num_views, tile_size=args.tile_size, s=args.num_scenes,
+        tile_stride=args.tile_stride, input_max_res=args.input_resolution,
+        num_workers=args.num_workers, max_workers_loading=args.max_workers_loading,
+        split_ratio=0.8, train=False)
+
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False,
+        num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
 
     # ----- Model setup -----
@@ -201,10 +234,13 @@ if __name__ == "__main__":
 
 
     # ----- Model training -----
-    loss_hist = train_mvtrn(model, dataloader, criterion, optimizer,
-                            device, args.num_epochs, start_epoch, loss_hist,
-                            args.output_dir, tile_size=args.tile_size,
-                            num_scenes=(args.num_scenes if args.num_scenes > 0 else dataset.num_of_scenes()))
+    num_scenes=(min(args.num_scenes, train_dataset.num_of_scenes())  if args.num_scenes > 0 else train_dataset.num_of_scenes())
+
+    loss_hist = train_mvtrn(
+        model, train_dataloader, val_dataloader, criterion, optimizer,
+        device, args.num_epochs, start_epoch, loss_hist,
+        args.output_dir, tile_size=args.tile_size,
+        num_scenes=num_scenes)
 
     plt.plot(loss_hist)
     plt.savefig(os.path.join(args.output_dir, 'loss.png'))
