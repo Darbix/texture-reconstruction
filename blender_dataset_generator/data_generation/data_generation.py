@@ -5,7 +5,7 @@ import bmesh
 from mathutils import Euler, Quaternion
 import random
 import colorsys
-
+import numpy as np
 
 def set_camera_position_and_rotation(cam, view_item):
     """
@@ -17,11 +17,14 @@ def set_camera_position_and_rotation(cam, view_item):
     cam.rotation_euler = Euler([math.radians(r) for r in view_item['rotation']], 'XYZ')
 
 
-def create_light(name, props, light_type='POINT'):
+def create_light(name, props, light_type='POINT', scene_prop_vals=None):
     """Creates and sets a light object"""
         
     light_data = bpy.data.lights.new(name, light_type)
     light_object = bpy.data.objects.new(name, light_data)
+    
+    # If the scene bias light values set, generate random values near those values
+    hue = np.clip(np.random.normal(loc=scene_prop_vals['HUE'], scale=0.05), props['HUE'][0], props['HUE'][1]) if scene_prop_vals else random.uniform(*props['HUE'])
     
     color_hsv = (
         random.uniform(*props['HUE']),
@@ -47,7 +50,18 @@ def create_light(name, props, light_type='POINT'):
     # Link to the current collection
     bpy.context.collection.objects.link(light_object)
     
-    return light_object
+    values = {
+        'HUE': color_hsv[0],
+        'SATURATION': color_hsv[1],
+        'VALUE': color_hsv[2],
+        'POWER': light_object.data.energy,
+        'x': light_location[0],
+        'y': light_location[1],
+        'z': light_location[2],
+        'SHADOW_FILTER_RANGE': light_object.data.shadow_filter_radius
+    }
+    
+    return light_object, values
 
 
 def create_area_light(name, location, size, energy_range, shadow_filter_range):

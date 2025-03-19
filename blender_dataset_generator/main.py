@@ -48,14 +48,14 @@ Z_SUBDIR = 'depth_imgs'
 NUM_SAMPLES = 1             # Max number of unique image sets to generate
 RENDER_FORMAT = 'PNG'       # Render image format
 RENDER_COLOR_DEPTH = '8'    # Render color depth
-RENDER_COMPRESSION = 15     # Render image compression (0-100)
+RENDER_COMPRESSION = 60     # Render image compression (0-100)
 RENDER_ENGINE = 'EEVEE'     # CYCLES or EEVEE
 # Number of the render samples
 RENDER_SAMPLES = 256 if RENDER_ENGINE == 'CYCLES' else 64        
 
-RES_X = 2560                # Render resolution X
-RES_Y = 1440                # Render resolution Y
-RES_COEF = .65              # Resolution reduction (normalized num of rays to render)
+RES_X = 3840                # Render resolution X
+RES_Y = 2160                # Render resolution Y
+RES_COEF = 0.5              # Resolution UV map reduction (influences a num of rays to render)
 
 MAPS_EXP_FORMAT = 'exr'     # Format to generate UV and Z maps in (exr or png)
 MAPS_EXP_DEPTH = np.float16 # Color depth for UV and Z maps (png 8/16, exr 16/32)
@@ -64,10 +64,9 @@ SURFACE_SIZE = 9            # Constant background surface size in meters
 RANDOM_SEED = None          # Random seed to keep some properties the same
 SKIP_TEXTURES = 0           # Skip first N textures to generate other
 
-
 # ----- General constants -----
-VIEWS_PER_TEXTURE = 1      # Camera random views to render for each image
-TOP_VIEWS_NUMBER = 4        # Number of view from max VIEWS_PER_TEXTURE to be only top views
+VIEWS_PER_TEXTURE = 30      # Camera random views to render for each image
+TOP_VIEWS_NUMBER = 2        # Number of view from max VIEWS_PER_TEXTURE to be only top views
 
 FRAME_NUMBER = 6            # Animation frame to generate
 FRAME_REMOVE_CRUMPLED = 5   # If > 0 the crumpled object is removed at that frame
@@ -77,7 +76,7 @@ FLIP_UV = False             # Flip the UV coordinations vertically (0,0 will be 
 
 # ----- Camera properties -----
 FOCAL_LENGTH = 50                     # Focal length
-PADDING_PERC = 0.20                   # The camera will not look to edges (1-padding)% away from the center
+PADDING_PERC = 0.15                   # The camera will not look to edges > (1-padding) * 100 % away from the center
 DIST_RADIUS_RANGE = (1.7, 2.3)        # Radius range in meters
 SECTOR_ANGLE_RANGE = (0, math.pi/4.2) # Sector angle rangle to place camera at (math.pi/2 is the flat)
 CAMERA_DEC_PLACES = 9                 # Decimal places to round output camera data
@@ -98,7 +97,7 @@ HEIGHT_ABOVE_CRUMPLED = 0.02        # How high above the pad the target is
 TARGET_OBJECT_MAX_SIZE = 3          # Image/texture max size in meters 
 
 texture_material_props = {
-    'ROUGHNESS_RANGE': (0.75, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
+    'ROUGHNESS_RANGE': (0.62, 1.0)  # 1.0 is fully matte, 0.0 is fully glossy
 }
 
 surface_material_props = {
@@ -125,18 +124,18 @@ physics_props = {
 
 # ----- Light properties -----
 main_light_props = {
-    'HUE': (0.0, 0.4),
-    'SATURATION': (0.0, 1.0),
-    'VALUE': (0.5, 1.0),
-    'POWER': (450, 1100),
+    'HUE': (0.0, 1.0),
+    'SATURATION': (0.0, 0.8),
+    'VALUE': (0.4, 1.0),
+    'POWER': (400, 1200),
     'x': (-4.0, 4.0),
     'y': (-4.0, 4.0),
-    'z': (3.0, 7.0),
+    'z': (2.0, 7.0),
     'SHADOW_FILTER_RANGE': (3, 6)
 }
 AREA_LOCATION = (0, 0, 8)          # Area light location
 AREA_SIZE = 8                      # Area light radius size
-AREA_ENERGY_RANGE = (100, 180)      # Area light watt energy range
+AREA_ENERGY_RANGE = (70, 170)      # Area light watt energy range
 AREA_SHADOW_FILTER_RANGE = (1, 5)  # Area shadow filter range
 
 
@@ -190,13 +189,13 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     subdivisions=TARGET_OBJECT_CUTS, dimensions=(dim_w, dim_h, 0.0),
                     location=(0, 0, CRUMPLE_FACTOR + HEIGHT_ABOVE_CRUMPLED))
                 data_generation.add_physics(target_name, physics_props)
-                nodes_target, texture_node_target = data_generation.set_material_nodes(target_object, 'Target_texture_material')
                 
                 # Set the target object texture
                 scene_init.set_uv_map_texture(target_object, loaded_texture)
-                
+
                 # Adjust the material properties
-                data_generation.adjust_material(nodes_target, texture_material_props)
+                nodes_target = target_object.active_material.node_tree.nodes
+                data_generation.adjust_material(nodes_target, texture_material_props)   
                 
                 # Poke square faces to 4 triangles each
                 bpy.ops.object.mode_set(mode='EDIT')
@@ -204,7 +203,6 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 bmesh.ops.poke(bm, faces=bm.faces)
                 bmesh.update_edit_mesh(target_object.data)
                 bpy.ops.object.mode_set(mode='OBJECT')
-                
                 
                 # ----- Crumpled plane settings -----
                 # Create the crumpled plane to form the main texture object
@@ -224,15 +222,6 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 
                 surface_path = os.path.join(surfaces_dir, surface_texture_name)
                 texture_node_surface.image = bpy.data.images.load(surface_path)
-                
-                
-                # ----- Light settings -----
-                light_objects = []
-                light_objects.append(data_generation.create_area_light('Light_area_0',
-                    AREA_LOCATION, AREA_SIZE, AREA_ENERGY_RANGE, AREA_SHADOW_FILTER_RANGE))
-                light_objects.append(data_generation.create_light('Light_0', main_light_props))
-                light_objects.append(data_generation.create_light('Light_1', main_light_props))
-                
                 
                 # ----- Animation of the target object -----
                 cloth_modifier = target_object.modifiers.get('Cloth')
@@ -298,9 +287,23 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # ----- Views and rendering -----
                 camera_info_list = []
                 render_dir_path = os.path.join(renders_dir, str(uuid.uuid4()))
+                scene_prop_vals = None # The first generated light setting (bias for other lights)
             
                 # Change a camera view and render a result
                 for view_index in range(0, VIEWS_PER_TEXTURE):
+                    # ----- Light settings -----
+                    # Change light a bit for each view
+                    light_objects = []
+                    light_objects.append(data_generation.create_area_light('Light_area_0',
+                        AREA_LOCATION, AREA_SIZE, AREA_ENERGY_RANGE, AREA_SHADOW_FILTER_RANGE))
+                    light1, temp_scene_prop_vals = data_generation.create_light('Light_0', main_light_props, scene_prop_vals=scene_prop_vals)
+                    if scene_prop_vals is None:
+                        scene_prop_vals = temp_scene_prop_vals
+                    light2, _ = data_generation.create_light('Light_1', main_light_props, scene_prop_vals=scene_prop_vals)
+                    
+                    light_objects.append(light1)
+                    light_objects.append(light2)
+
                     # ----- Camera view positioning ------
                     # Point to look at
                     point_x = 0
@@ -356,11 +359,11 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     # Cast the rays from the camera to the target object's texture 
                     ray_cast_and_export_maps(render_dir_path, render_name.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, flip_uv=FLIP_UV, visualize=False)
+                    
+                    # ----- Remove lights -----
+                    for light_object in light_objects:
+                        bpy.data.objects.remove(light_object)
 
-
-                # ----- Remove created lights -----
-                for light_object in light_objects:
-                    bpy.data.objects.remove(light_object)
                 bpy.ops.object.select_all(action='DESELECT') 
                 
                 # ----- Save data for cameras -----
