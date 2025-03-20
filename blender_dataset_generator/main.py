@@ -49,9 +49,9 @@ NUM_SAMPLES = 1             # Max number of unique image sets to generate
 RENDER_FORMAT = 'PNG'       # Render image format
 RENDER_COLOR_DEPTH = '8'    # Render color depth
 RENDER_COMPRESSION = 60     # Render image compression (0-100)
-RENDER_ENGINE = 'EEVEE'     # CYCLES or EEVEE
+RENDER_ENGINE = 'CYCLES'    # CYCLES or EEVEE
 # Number of the render samples
-RENDER_SAMPLES = 256 if RENDER_ENGINE == 'CYCLES' else 64        
+RENDER_SAMPLES = 128 if RENDER_ENGINE == 'CYCLES' else 64        
 
 RES_X = 3840                # Render resolution X
 RES_Y = 2160                # Render resolution Y
@@ -177,6 +177,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # ----- Target object settings -----
                 # Change the image texture
                 loaded_texture = bpy.data.images.load(texture_path)
+                print(f"Loaded texture {texture_path}")
                 texture_width, texture_height = loaded_texture.size
                 size_ratio = texture_width / texture_height
                 
@@ -287,19 +288,24 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                 # ----- Views and rendering -----
                 camera_info_list = []
                 render_dir_path = os.path.join(renders_dir, str(uuid.uuid4()))
-                scene_prop_vals = None # The first generated light setting (bias for other lights)
-            
+                scene_props_light1 = None # The first generated light1 setting (bias for other lights)
+                scene_props_light2 = None # The first generated light2 setting (bias for other lights)
+                
+                print(f"Output directory: {render_dir_path}")
+                
                 # Change a camera view and render a result
                 for view_index in range(0, VIEWS_PER_TEXTURE):
                     # ----- Light settings -----
-                    # Change light a bit for each view
+                    # Change light a bit for each view (only the first view generates completely random values)
                     light_objects = []
                     light_objects.append(data_generation.create_area_light('Light_area_0',
                         AREA_LOCATION, AREA_SIZE, AREA_ENERGY_RANGE, AREA_SHADOW_FILTER_RANGE))
-                    light1, temp_scene_prop_vals = data_generation.create_light('Light_0', main_light_props, scene_prop_vals=scene_prop_vals)
-                    if scene_prop_vals is None:
-                        scene_prop_vals = temp_scene_prop_vals
-                    light2, _ = data_generation.create_light('Light_1', main_light_props, scene_prop_vals=scene_prop_vals)
+                    light1, temp_scene_props_light1 = data_generation.create_light('Light_0', main_light_props, scene_prop_vals=scene_props_light1)
+                    if scene_props_light1 is None:
+                        scene_props_light1 = temp_scene_props_light1
+                    light2, temp_scene_props_light2 = data_generation.create_light('Light_1', main_light_props, scene_prop_vals=scene_props_light2)
+                    if scene_props_light2 is None:
+                        scene_props_light2 = temp_scene_props_light2
                     
                     light_objects.append(light1)
                     light_objects.append(light2)
@@ -359,6 +365,8 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
                     # Cast the rays from the camera to the target object's texture 
                     ray_cast_and_export_maps(render_dir_path, render_name.rsplit('.', 1)[0],
                         res_x=RES_X, res_y=RES_Y, res_coef=RES_COEF, flip_uv=FLIP_UV, visualize=False)
+                    
+                    print(f"Done {view_index + 1}/{VIEWS_PER_TEXTURE} views in {render_dir_path} for texture {texture_name}")
                     
                     # ----- Remove lights -----
                     for light_object in light_objects:
@@ -438,6 +446,7 @@ def export_scene_objects(export_obj_path, render_set, objects):
 
 def define_render():
     if(RENDER_ENGINE == 'CYCLES'):
+        print("Render: CYCLES")
         bpy.context.scene.render.engine = 'CYCLES'
         bpy.context.scene.cycles.samples = RENDER_SAMPLES
         # Blender preferences -> System -> CUDA
@@ -448,6 +457,7 @@ def define_render():
         device.use = True
         print(f"Device: {device.name} is used")
     else:
+        print("Render: EEVEE")
         bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
         bpy.context.scene.eevee.taa_render_samples = RENDER_SAMPLES
 
@@ -479,9 +489,9 @@ if __name__ == "__main__":
     initialize_scene(surface_size=SURFACE_SIZE)
     
     if not os.path.exists(RENDERS_DIR):
-        os.makedirs(RENDERS_DIR)
+        os.makedirs(RENDERS_DIR, exist_ok=True)
     if not os.path.exists(OBJ_DIR):
-        os.makedirs(OBJ_DIR)
+        os.makedirs(OBJ_DIR, exist_ok=True)
         
     # Render settings
     bpy.context.scene.render.resolution_x = RES_X

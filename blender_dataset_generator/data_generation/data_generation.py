@@ -27,7 +27,7 @@ def create_light(name, props, light_type='POINT', scene_prop_vals=None):
     hue = np.clip(np.random.normal(loc=scene_prop_vals['HUE'], scale=0.05), props['HUE'][0], props['HUE'][1]) if scene_prop_vals else random.uniform(*props['HUE'])
     
     color_hsv = (
-        random.uniform(*props['HUE']),
+        hue,
         random.uniform(*props['SATURATION']),
         random.uniform(*props['VALUE'])
     )
