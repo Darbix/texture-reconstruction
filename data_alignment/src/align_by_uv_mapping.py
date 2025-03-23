@@ -1,8 +1,10 @@
+# align_by_uv_mapping.py
+
 import cv2
 import numpy as np
 
 from image_utils import load_exr_to_array, find_bounding_box,\
-    crop_image_to_bbox, resize_image
+    crop_image_to_bbox, resize_to_max_size
 
 
 def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=1.5):
@@ -28,10 +30,10 @@ def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=
     uv_upsample_factor = uv_upscale_factor
     max_size_upsampled = int(max_size * uv_upsample_factor)
 
-    view_img_resized = resize_image(view_img_cropped, max_size_upsampled,
-                                    interpolation=cv2.INTER_CUBIC)
-    uv_img_resized = resize_image(uv_img_cropped.astype(np.float32), max_size_upsampled,
-                                  interpolation=cv2.INTER_CUBIC)
+    view_img_resized = resize_to_max_size(
+        view_img_cropped, max_size=max_size_upsampled)
+    uv_img_resized = resize_to_max_size(
+        uv_img_cropped.astype(np.float32), max_size=max_size_upsampled)
 
     # Visualization of the cropped and resized UV map
     # plt.imshow((uv_img_resized * 255).astype(np.uint8))
@@ -42,7 +44,8 @@ def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=
     
     # Resize back to the texture size
     if(uv_upsample_factor > 1.0):
-        aligned_view_img = resize_image(aligned_view_img, max_size)
+        aligned_view_img = resize_to_max_size(aligned_view_img,
+            max_size=max_size)
     
     # Enhance the image by inpainting the gaps due to low resolution UV mapping
     enhanced_img = inpaint_gaps(aligned_view_img)
@@ -78,7 +81,8 @@ def inpaint_gaps(aligned_view_img):
             # Create an empty mask for the largest contour
             object_mask = np.zeros_like(mask)
             # Fill the object mask
-            cv2.drawContours(object_mask, [max_contour], -1, 255, thickness=cv2.FILLED)
+            cv2.drawContours(object_mask, [max_contour], -1, 255,
+                thickness=cv2.FILLED)
             # Shrink the object bounding
             kernel = np.ones((3, 3), np.uint8)
             object_mask = cv2.erode(object_mask, kernel, iterations=1)

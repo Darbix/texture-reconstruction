@@ -5,3 +5,4 @@ openexr
 huggingface-hub
 psutil
 safetensors
+ptlflow
