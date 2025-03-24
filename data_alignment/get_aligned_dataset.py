@@ -115,8 +115,8 @@ if __name__ == "__main__":
                 ref_uv_img_path = files[UV_IMGS_DIR][0]
 
                 ref_view_img = get_ref_image(
-                    max_image_shape, ref_view_img_path, ref_uv_img_path,
-                    mask_object=args.mask)
+                    max(max_image_shape[:2]), ref_view_img_path,
+                    uv_path=ref_uv_img_path, mask_object=args.mask)
                 print("   Reference view:", os.path.basename(ref_view_img_path),
                       "Resized shape:", ref_view_img.shape)
 

@@ -85,18 +85,6 @@ def load_exr_to_array(exr_filename):
     return np.stack((r, g, b, a), axis=-1)
 
 
-# def resize_image(image_array, max_size, interpolation=cv2.INTER_LINEAR):
-#     """Resizes the numpy array image so that the longer side is max_size"""
-#     height, width = image_array.shape[:2]
-#     # Determine the current longer side
-#     longer_side = max(height, width)
-#     factor = max_size / longer_side
-#     # Resize the image and preserve aspect ratio
-#     resized_image = cv2.resize(image_array,
-#                                (int(width * factor), int(height * factor)),
-#                                interpolation=interpolation)
-#     return resized_image
-
 def resize_to_max_size(image, max_size=-1, interpolation=cv2.INTER_AREA, 
     clip_range=None):
     """

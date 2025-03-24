@@ -263,9 +263,13 @@ def init_opticalflow_model(model_name='sea_raft_s', ckpt_path='kitti'):
 
 def get_texture_area_image(view_img_path, uv_img_path, mask_object=True):
     """Crop and mask the texture area of the image view"""
+    view_img = cv2.imread(view_img_path, cv2.IMREAD_UNCHANGED)
+    
+    if not uv_img_path:
+       return view_img
+    
     uv_img = load_exr_to_array(uv_img_path)
     alpha_channel = uv_img[:, :, -1]
-    view_img = cv2.imread(view_img_path, cv2.IMREAD_UNCHANGED)
     bbox = find_bounding_box(alpha_channel)
 
     # Crop just the surface object using UV mask rectangle
@@ -275,21 +279,19 @@ def get_texture_area_image(view_img_path, uv_img_path, mask_object=True):
     # Extract (mask) the surface visible area
     if(mask_object == True):
         alpha_mask = (alpha_channel_cropped > 0).astype(np.uint8) * 255
-        view_img_masked = cv2.bitwise_and(view_img_cropped, view_img_cropped, mask=alpha_mask)
+        view_img_masked = cv2.bitwise_and(view_img_cropped, view_img_cropped,
+            mask=alpha_mask)
         return view_img_masked
     return view_img_cropped
 
 
-def get_ref_image(texture_shape, ref_view_img_path, ref_uv_img_path, mask_object=True):
+def get_ref_image(max_size, ref_view_img_path, uv_path=None,
+    mask_object=False):
     """Crop and mask the texture area from the reference image"""
-    # Get the reference texture dimensions
-    texture_h, texture_w, _ = texture_shape
-    max_size = max(texture_h, texture_w)
+    ref_view_img_masked = get_texture_area_image(
+        ref_view_img_path, uv_path, mask_object)
 
-    ref_view_img_masked = get_texture_area_image(ref_view_img_path, ref_uv_img_path, mask_object)
-
-    # The output reference texture view is resized to the known texture shape
-    # In practice there would be probably constant max resolution to resize to
+    # The output reference texture view is resized to the specific max size
     ref_view_img_resized = resize_to_max_size(
         ref_view_img_masked, max_size=max_size)
     return ref_view_img_resized
