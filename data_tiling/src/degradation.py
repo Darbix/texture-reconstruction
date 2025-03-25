@@ -43,15 +43,15 @@ def apply_light_degradation(image):
     degraded_image = image
 
     degraded_image = apply_noise(
-        degraded_image, stddev=random.uniform(0, 1.8))
+        degraded_image, stddev=random.uniform(0, 1))
     dir = random.choice([(0, 1), (1, 0), (-1, 1), (1, -1), (-1, -1)])
     degraded_image = apply_chromatic_aberration(
         degraded_image, shift=random.randint(0, 3), dir_h=dir[0], dir_v=dir[1])
     degraded_image, alpha_channel = apply_cfa(degraded_image)
     degraded_image = ahd_demosaic(degraded_image, alpha_channel=alpha_channel)
     degraded_image = apply_jpeg_compression(
-        degraded_image, quality=random.randint(70, 100))
-    mean, stddev, max_shift = 0, 1.8, 5
+        degraded_image, quality=random.randint(90, 100))
+    mean, stddev, max_shift = 0, 1.5, 5
     degraded_image = apply_displacement(
         degraded_image,
         dx=np.clip(np.random.normal(mean, stddev), -max_shift, max_shift),
@@ -83,10 +83,12 @@ def apply_blur(image, kernel_size=9):
 
 
 def apply_noise(image, mean=0, stddev=10):
-    """Applies noise to an image as normal distributed values"""
-    noise = np.random.normal(mean, stddev, image.shape).astype(np.int16)
-    noisy_image = np.clip(image.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-    return noisy_image
+    """Applies noise to an image as normal distributed values (excluding alpha channel)"""
+    if image.shape[2] == 4:
+        rgb, alpha = image[:, :, :3], image[:, :, 3]
+        noisy_rgb = np.clip(rgb + np.random.normal(mean, stddev, rgb.shape).astype(np.int16), 0, 255).astype(np.uint8)
+        return np.dstack((noisy_rgb, alpha))
+    return np.clip(image + np.random.normal(mean, stddev, image.shape).astype(np.int16), 0, 255).astype(np.uint8)
 
 
 def apply_chromatic_aberration(image, shift=3, dir_h=1, dir_v=0):
