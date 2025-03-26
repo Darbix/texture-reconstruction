@@ -1,8 +1,12 @@
 # train.py
 
 import os
-import gc
 import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'config')))
+
+import gc
 import time
 import random
 import argparse
@@ -14,13 +18,9 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../config')))
-
 from utils import plot_patches, load_img_patches, plot_random_val_patch, \
     compose_sr_lr_hr, get_patch_transform
-from model import MVTRN, MVTRN_UNet
-from model_utils import MSELoss, save_checkpoint, load_checkpoint
+from model_utils import MSELoss, save_checkpoint, load_checkpoint, setup_model
 from dataset import MultiViewDataset
 import config
 
@@ -173,14 +173,8 @@ if __name__ == "__main__":
 
 
     # ----- Model setup -----
-    model = None
-    if(args.model_type == 'UNET'):
-        print("MVTRN_UNET")
-        model = MVTRN_UNet(num_views=args.num_views)
-    else:
-        print("MVTRN_DEFAULT")
-        model = MVTRN(num_views=args.num_views, upscale_factor=args.upscale_factor)
-    
+    model = setup_model(args.model_type, num_views=args.num_views)
+
     # criterion = PerceptualLoss()  # Perceptual loss for better visual quality
     criterion = MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
@@ -209,11 +203,7 @@ if __name__ == "__main__":
 
     # ----- Test inference -----
     # Load weights of a trained model
-    cnn_model = None
-    if(args.model_type == config.ModelType.UNET.value):
-        cnn_model = MVTRN_UNet(num_views=args.num_views)
-    else:
-        cnn_model = MVTRN(num_views=args.num_views)
+    cnn_model = setup_model(args.model_type, num_views=args.num_views)
     
     optimizer = optim.Adam(cnn_model.parameters(), lr=args.learning_rate)
     device = torch.device("cpu")

@@ -17,3 +17,5 @@ SCENE_INFO_DATA = "info.json"           # File with additional scene and patch d
 class ModelType(Enum):
     DEFAULT = 'DEFAULT'
     UNET = 'UNET'
+    UNET_SEPARATED = 'UNET_SEPARATED'
+    UNET_ATTENTION = 'UNET_ATTENTION'

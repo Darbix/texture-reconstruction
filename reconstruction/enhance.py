@@ -2,6 +2,10 @@
 
 import os
 import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'config')))
+
 import json
 import math
 import argparse
@@ -13,9 +17,6 @@ from concurrent.futures import ThreadPoolExecutor
 import torch
 import torch.utils.data as data
 import torchvision.transforms as T
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../config')))
 
 from model import MVTRN, MVTRN_UNet
 from model_utils import load_checkpoint
@@ -54,18 +55,19 @@ def save_lr_ref_view_resized(image_shape, ref_image_path, output_path):
     # Load an RGB ref view image and resize to fit the specific max image size
     ref_image = load_image(ref_image_path, max(image_shape))[:, :, :3]
 
-    pad_bottom = image_h - ref_image.shape[0]
-    pad_right = image_w - ref_image.shape[1]
+    # pad_bottom = image_h - ref_image.shape[0]
+    # pad_right = image_w - ref_image.shape[1]
     
-    # Pad the image to be aligned with the specific image
-    padded_ref_image = np.pad(
-        ref_image,
-        ((0, pad_bottom), (0, pad_right), (0, 0)),
-        mode='constant',
-        constant_values=0 # Black
-    )
+    # # Pad the image to be aligned with the specific image
+    # padded_ref_image = np.pad(
+    #     ref_image,
+    #     ((0, pad_bottom), (0, pad_right), (0, 0)),
+    #     mode='constant',
+    #     constant_values=0 # Black
+    # )
 
-    plt.imsave(output_path, padded_ref_image)
+    # plt.imsave(output_path, padded_ref_image)
+    plt.imsave(output_path, ref_image)
     print(f"The output image saved to {output_path}")
 
 
@@ -138,10 +140,10 @@ def enhance_image_multiview(model, data_path, output_path, num_views,
         num_workers=num_workers
     )
     # Assuming all images are the same size!
-    img_height, img_width = images[0].shape[:2]
+    orig_img_height, orig_img_width = images[0].shape[:2]
     # Image size with padding caused by patches and stride
-    img_height = math.ceil((img_height - patch_size) / patch_stride) * patch_stride + patch_size
-    img_width = math.ceil((img_width - patch_size) / patch_stride) * patch_stride + patch_size
+    img_height = math.ceil((orig_img_height - patch_size) / patch_stride) * patch_stride + patch_size
+    img_width = math.ceil((orig_img_width - patch_size) / patch_stride) * patch_stride + patch_size
 
     # Total number of patches
     total_patches_num = ((img_height - patch_size) // patch_stride + 1) * ((img_width - patch_size) // patch_stride + 1)
@@ -213,7 +215,9 @@ def enhance_image_multiview(model, data_path, output_path, num_views,
     image = normalize_composed_image(output_image, weight_map)
 
     # Resize to not be larger than max_size
-    image = resize_to_max_size(image, max_image_size)
+    # image = resize_to_max_size(image, max_image_size)
+    # Cut out the padding
+    image = image[:orig_img_height, :orig_img_width, :]
 
     if(output_path):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)

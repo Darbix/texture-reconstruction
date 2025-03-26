@@ -285,9 +285,6 @@ def compose_sr_lr_hr(model, data_path, n_patches, max_size=-1):
             patch_x=patch_x, patch_y=patch_y, blend_mask=blend_mask
         )
 
-        i += 1
-        if i > 5:
-            break
         total_patches = scene_info["len"]
         print(f"{i}/{total_patches} patches processed")
 
