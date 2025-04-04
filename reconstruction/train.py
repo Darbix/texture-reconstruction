@@ -88,8 +88,8 @@ def train_mvtrn(
             optimizer.zero_grad()
             patch_loss = 0
 
-            # Each 5th batch plot info
-            if((batch_idx + 1) % 5 == 0 or batch_idx == 0):
+            # Each 25th batch plot info
+            if((batch_idx + 1) % 25 == 0 or batch_idx == 0):
                 curr_run_time = (time.time() - start_time) / 60
                 print(f"{batch_idx + 1}/{len(train_dataloader)},",
                       f"{curr_run_time:.1f} minutes")

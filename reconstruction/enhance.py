@@ -6,6 +6,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'config')))
 
+import cv2
 import json
 import math
 import argparse
@@ -13,13 +14,15 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor
+from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import peak_signal_noise_ratio as psnr
 
 import torch
 import torch.utils.data as data
 import torchvision.transforms as T
 
 from model import MVTRN, MVTRN_UNet
-from model_utils import load_checkpoint
+from model_utils import load_checkpoint, setup_model
 from utils import resize_to_max_size, plot_patches, get_patch_transform, \
     get_patch_weight_blend_mask, attach_patch_to_image, normalize_composed_image
 import config
@@ -42,7 +45,33 @@ def parse_args():
     parser.add_argument('--max_image_size', type=int, default=-1, help="Maximum size for the output image")
     # Other
     parser.add_argument('--device', type=str, default='cuda', help="Device to run the model on (cpu or cuda)")
+    parser.add_argument('--gt_texture', type=str, help="Path to a GT texture to compare with a reconstructed image")
     return parser.parse_args()
+
+
+def load_texture(texture_path, max_size=None):
+    texture = cv2.imread(texture_path)
+    if(max_size):
+        texture = resize_to_max_size(texture, max_size=max_size)
+    return texture
+
+
+def compare_images(gt_texture, image, metric='PSNR'):
+    """Compares uint8 images by a specific metric"""
+
+    if(gt_texture.shape[:2] != image.shape[:2]):
+        print(f"The image shapes do not match {gt_texture.shape[:2]} != {image.shape[:2]}",
+            "These images cannot be compared.")
+        return None
+    
+    if(metric == 'PSNR'):
+        psnr_value = psnr(gt_texture, image)
+        return psnr_value
+    elif(metric == 'SSIM'):
+        ssim_value = ssim(gt_texture, image, channel_axis=-1)
+        return ssim_value
+
+    return None
 
 
 def save_lr_ref_view_resized(image_shape, ref_image_path, output_path):
@@ -234,16 +263,13 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     print("Loading a model")
-    model = None
-    if(args.model_type == config.ModelType.UNET.value):
-        model = MVTRN_UNet(num_views=args.num_views)
-    else:
-        model = MVTRN(num_views=args.num_views)
+    model = setup_model(args.model_type, num_views=args.num_views)
     model = model.to(device)
 
     print(f"Loading checkpoint (model weights) from {args.checkpoint_path}")
     optimizer = None
-    model, optimizer, epoch, loss_hist = load_checkpoint(model, args.checkpoint_path, optimizer, device)
+    model, optimizer, epoch, loss_hist = load_checkpoint(
+        model, args.checkpoint_path, optimizer, device)
     model.eval()
 
     # Enhance the image using the MVTRN model
@@ -251,7 +277,18 @@ if __name__ == "__main__":
         args.num_views, args.patch_size, args.patch_stride,
         args.max_image_size, num_workers=args.num_workers,
         alpha_threshold=args.alpha_threshold)
-    
+
+    # Normalize the image from np.float32 to np.uint8
+    image = (np.clip(image, 0.0, 1.0) * 255).astype(np.uint8)
+
+    # If a path to a texture for comparison is given, compare image by metrics 
+    if(args.gt_texture):
+        gt_texture = load_texture(args.gt_texture, args.max_image_size)
+        value = compare_images(gt_texture, image, metric='PSNR')
+        print(f"PSNR value: {value:.5f} db")
+        value = compare_images(gt_texture, image, metric='SSIM')
+        print(f"SSIM value: {value:.5f}")
+
     # Take the first view image file as the reference view and save too
     file_name = sorted([f for f in os.listdir(args.data_path) if f.endswith(('.png', '.jpg', '.jpeg'))])[0]
     save_lr_ref_view_resized(

@@ -94,8 +94,8 @@ class MVTRN_UNet(nn.Module):
         x = x.view(B, C * N, H, W)
 
         # Ensure height and width are multiples of 32 by padding
-        h_pad = (-H) % 32
-        w_pad = (-W) % 32
+        h_pad = (32 - (H % 32)) % 32
+        w_pad = (32 - (W % 32)) % 32
         x = F.pad(x, (0, w_pad, 0, h_pad), mode='reflect')
         
         x = self.unet(x)
@@ -146,8 +146,8 @@ class MVTRN_UNet_Separated(nn.Module):
             
             # Ensure height and width are multiples of 32 for UNet compatibility
             # Expects no size change in view_extractors
-            h_pad = (-H) % 32
-            w_pad = (-W) % 32
+            h_pad = (32 - (H % 32)) % 32
+            w_pad = (32 - (W % 32)) % 32
             processed_view = F.pad(processed_view, (0, w_pad, 0, h_pad),
                 mode='reflect')
  
@@ -191,41 +191,45 @@ class SEBlock(nn.Module):
 
 
 class SelfAttentionBlock(nn.Module):
-    """A simple self-attention block for spatial attention enhancement"""
-    def __init__(self, in_channels, num_heads=6):
+    """Memory-efficient self-attention block with downsampling and upsampling"""
+    def __init__(self, in_channels, num_heads=2, scale_factor=2):
         super(SelfAttentionBlock, self).__init__()
-        
+
         self.num_heads = num_heads
         self.in_channels = in_channels
-        
-        # Multi-Head Attention layer
+        self.scale_factor = scale_factor
+
+        # Multi-Head Attention
         self.attention = nn.MultiheadAttention(embed_dim=in_channels, num_heads=num_heads, batch_first=True)
 
         # Feed-forward layers
         self.fc1 = nn.Linear(in_channels, in_channels * 2)
         self.fc2 = nn.Linear(in_channels * 2, in_channels)
 
+        # Upsampling to restore original size
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
+
     def forward(self, x):
         B, C, H, W = x.shape
-        
-        # Reshape x to feed into self-attention
-        x = x.view(B, C, H * W).permute(0, 2, 1) # Shape: (B, H * W, C)
 
-        # Apply multi-head attention
-        attn_output, _ = self.attention(x, x, x) # Input Q, K, V
-        
+        # Downsample using interpolation
+        H_reduced, W_reduced = H // self.scale_factor, W // self.scale_factor
+        x_down = F.interpolate(x, size=(H_reduced, W_reduced), mode='bilinear', align_corners=False)
+
+        # Reshape for self-attention
+        x_attn = x_down.view(B, C, -1).permute(0, 2, 1) # Shape: (B, H'W', C)
+
+        # Apply multi-head attention without mixed precision (no autocast)
+        attn_output, _ = self.attention(x_attn, x_attn, x_attn)
+
         # Residual connection
-        attn_output = x + attn_output
+        attn_output = attn_output + x_attn
+        attn_output = self.fc2(F.relu(self.fc1(attn_output))) + attn_output # Ensure shape consistency
 
-        # Feed-forward network
-        attn_output = self.fc2(F.relu(self.fc1(attn_output)))
-        
-        # Apply residual connection
-        output = attn_output + x
-        
-        # Reshape back to (B, C, H, W)
-        output = output.permute(0, 2, 1).view(B, C, H, W)
-        
+        # Reshape back and upsample to original size
+        attn_output = attn_output.permute(0, 2, 1).view(B, C, H_reduced, W_reduced)
+        output = self.upsample(attn_output)
+
         return output
 
 
