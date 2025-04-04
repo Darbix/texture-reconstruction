@@ -61,6 +61,9 @@ if __name__ == "__main__":
     TEXTURE_PATH = args.texture_path # Path to a texture directory
     OUTPUT_PATH = args.output_path   # Path to an output directory
     TOGGLE_UV_OR_HGOF = 'HGOF' if args.hgof else 'UV'
+    # For homography and optical flow alignment the UV maps are not needed
+    if(TOGGLE_UV_OR_HGOF == 'HGOF'):
+        UV_IMGS_DIR = None
 
     if None in [DATA_PATH, TEXTURE_PATH, OUTPUT_PATH]:
         raise ValueError("One or more required paths are not set")
@@ -78,7 +81,7 @@ if __name__ == "__main__":
 
         # Load a texture image shape for the current scene
         if files[DATA_INFO_FILE]:
-            max_image_shape = load_copy_texture(
+            max_image_shape, texture_img_path = load_copy_texture(
                 files[DATA_INFO_FILE], scene, TEXTURE_PATH, OUTPUT_PATH
             )
         else:
@@ -109,14 +112,15 @@ if __name__ == "__main__":
         else:
             ref_view_img = None
             if(len(files[VIEW_IMGS_DIR]) > 1):
-                # Reference top view is the first image in the directory
-                ref_view_img_path = files[VIEW_IMGS_DIR][0]
-                # Reference top view UV map used for crop keypoints
-                ref_uv_img_path = files[UV_IMGS_DIR][0]
+                # Reference top view
+                # The texture image (all views aligned to a GT texture)
+                ref_view_img_path = texture_img_path
+                # Or the first image in the directory
+                # ref_view_img_path = files[VIEW_IMGS_DIR][0]
 
                 ref_view_img = get_ref_image(
                     max(max_image_shape[:2]), ref_view_img_path,
-                    uv_path=ref_uv_img_path, mask_object=args.mask)
+                    mask_object=args.mask)
                 print("   Reference view:", os.path.basename(ref_view_img_path),
                       "Resized shape:", ref_view_img.shape)
 

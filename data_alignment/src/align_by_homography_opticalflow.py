@@ -58,8 +58,8 @@ def get_patch_weight_blend_mask(patch_size):
                             np.minimum(x_grid, 2 - x_grid))
     blend_mask = np.expand_dims(blend_mask, axis=-1) # [H, W, 1]
     
-    # To strenghten the patch center weight over the edges
-    # blend_mask = np.sqrt(blend_mask)
+    # To strengthen the patch center weight over the edges
+    blend_mask = blend_mask ** 3
 
     blend_mask = np.clip(blend_mask, 1e-7, None)
 
@@ -81,6 +81,11 @@ def process_patch(y, x, ref_img_padded, tgt_img_padded, model, patch_size,
 
     ref_patch = ref_img_padded[y:y_end, x:x_end]
     tgt_patch = tgt_img_padded[y:y_end, x:x_end]
+
+    # Skip processing if the patch has all values zeros
+    if np.all(tgt_patch < 1e-6):
+        print(f"Patch y: {y}, x: {x} skipped due to zero values") 
+        return (y, x, np.zeros_like(ref_patch))
 
     # Apply the optical flow model on a patch
     aligned_patch = align_image_opticalflow(

@@ -15,9 +15,10 @@ def load_data_iteratively(data_path, VIEW_IMGS_DIR, UV_IMGS_DIR, DATA_INFO_FILE,
         if not os.path.isdir(scene_path):
             continue
 
+        # Get all paths to images and other data for a specific scene
         files = {
-            VIEW_IMGS_DIR: sorted(glob(os.path.join(scene_path, VIEW_IMGS_DIR, "*.png"))),
-            UV_IMGS_DIR:   sorted(glob(os.path.join(scene_path, UV_IMGS_DIR, "*.exr"))),
+            VIEW_IMGS_DIR: sorted(glob(os.path.join(scene_path, VIEW_IMGS_DIR, "*.png")) + glob(os.path.join(scene_path, VIEW_IMGS_DIR, "*.jpg"))),
+            UV_IMGS_DIR:   sorted(glob(os.path.join(scene_path, UV_IMGS_DIR, "*.exr"))) if UV_IMGS_DIR else None,
             DATA_INFO_KEY: os.path.join(scene_path, DATA_INFO_FILE) if os.path.exists(os.path.join(scene_path, DATA_INFO_FILE)) else None
         }
 
@@ -38,7 +39,7 @@ def load_copy_texture(info_file_path, scene_dir_name, texture_path, output_path)
         os.makedirs(os.path.join(output_path, scene_dir_name), exist_ok=True)
         shutil.copy(texture_path_src, texture_path_dst)
 
-        return texture_img.shape
+        return texture_img.shape, texture_path_src
 
 
 def save_img(aligned_img, img_path, compression_level=0):
