@@ -263,8 +263,9 @@ class MVTRN_UNet_Attention(nn.Module):
         x = self.self_attention(x)
 
         # Ensure height and width are multiples of 32 by padding
-        h_pad = (-H) % 32
-        w_pad = (-W) % 32
+        h_pad = (32 - (H % 32)) % 32
+        w_pad = (32 - (W % 32)) % 32
+
         x = F.pad(x, (0, w_pad, 0, h_pad), mode='reflect')
 
         x = self.unet(x)
