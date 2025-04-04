@@ -130,7 +130,7 @@ if __name__ == "__main__":
                 # No need to save the reference texture as a view
                 # save_img(ref_view_img, output_img_path,
                 #     compression_level=args.compression)
-                print("Saved image:", output_img_path, ref_view_img.shape)
+                # print("Saved image:", output_img_path, ref_view_img.shape)
             else:
                 print("Not enough files")
                 continue
