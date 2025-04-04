@@ -95,8 +95,8 @@ if __name__ == "__main__":
                 # The UV map for the specific view_img_path
                 uv_img_path = files[UV_IMGS_DIR][i]
 
-                print("   Image: ", view_img_path)
-                print("   UV img:", uv_img_path)
+                print("Image: ", view_img_path)
+                print("UV img:", uv_img_path)
 
                 aligned_img = align_image_uv(max_image_shape, view_img_path,
                     uv_img_path, uv_upscale_factor=args.uv_upscale)
@@ -106,7 +106,7 @@ if __name__ == "__main__":
                     os.path.basename(view_img_path))
                 save_img(aligned_img, output_img_path,
                     compression_level=args.compression)
-                print("   Saved image:", output_img_path, aligned_img.shape)
+                print("Saved image:", output_img_path, aligned_img.shape)
 
         # Homography + Optical flow
         else:
@@ -121,28 +121,25 @@ if __name__ == "__main__":
                 ref_view_img = get_ref_image(
                     max(max_image_shape[:2]), ref_view_img_path,
                     mask_object=args.mask)
-                print("   Reference view:", os.path.basename(ref_view_img_path),
+                print("Reference view:", os.path.basename(ref_view_img_path),
                       "Resized shape:", ref_view_img.shape)
 
                 output_img_path = os.path.join(
                     OUTPUT_PATH, scene, VIEW_IMGS_DIR,
                     os.path.basename(ref_view_img_path))
-                save_img(ref_view_img, output_img_path,
-                    compression_level=args.compression)
-                print("   Saved image:", output_img_path, ref_view_img.shape)
+                # No need to save the reference texture as a view
+                # save_img(ref_view_img, output_img_path,
+                #     compression_level=args.compression)
+                print("Saved image:", output_img_path, ref_view_img.shape)
             else:
                 print("Not enough files")
                 continue
 
             for i, view_img_path in enumerate(files[VIEW_IMGS_DIR][1:], start=1):
-                # The UV map for the specific view_img_path
-                uv_img_path = files[UV_IMGS_DIR][i]
-
-                print("   Image: ", view_img_path)
-                print("   UV img:", uv_img_path)
+                print("Image: ", view_img_path)
 
                 aligned_img = align_image_hg_of_with_tiling(
-                    model, args, ref_view_img, view_img_path, uv_img_path,
+                    model, args, ref_view_img, view_img_path,
                     mask_object=True, max_size_hg=args.max_size_hg, 
                     max_size_of=args.max_size_of, patch_size=args.patch_size, 
                     patch_stride=args.patch_stride)
@@ -152,7 +149,7 @@ if __name__ == "__main__":
                     os.path.basename(view_img_path))
                 save_img(aligned_img, output_img_path,
                     compression_level=args.compression)
-                print("   Saved image:", output_img_path, aligned_img.shape)
+                print("Saved image:", output_img_path, aligned_img.shape)
 
                 # Free up the memory
                 torch.cuda.empty_cache()

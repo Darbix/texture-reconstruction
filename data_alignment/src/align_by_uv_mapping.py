@@ -52,7 +52,7 @@ def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=
     if(enhanced_img is not None):
         aligned_view_img = enhanced_img
 
-    print("   Upscaled shape:", view_img_resized.shape,
+    print("Upscaled shape:", view_img_resized.shape,
           "Texture and output shape:", aligned_view_img.shape)
     
     return aligned_view_img

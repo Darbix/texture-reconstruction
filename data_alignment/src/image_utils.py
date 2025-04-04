@@ -34,7 +34,7 @@ def load_copy_texture(info_file_path, scene_dir_name, texture_path, output_path)
         texture_path_dst = os.path.join(output_path, scene_dir_name, texture_name)
         # Load the texture image
         texture_img = cv2.imread(texture_path_src)
-        print("   Texture:", texture_name, "Shape:", texture_img.shape)
+        print("Texture:", texture_name, "Shape:", texture_img.shape)
         # Copy the texture to the target location
         os.makedirs(os.path.join(output_path, scene_dir_name), exist_ok=True)
         shutil.copy(texture_path_src, texture_path_dst)

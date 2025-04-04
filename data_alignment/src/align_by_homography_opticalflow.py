@@ -21,14 +21,14 @@ from image_utils import load_exr_to_array, find_bounding_box,\
 
 
 def align_image_hg_of_with_tiling(model, args, ref_view_img, view_img_path,
-    uv_img_path, mask_object=True, max_size_hg=-1, max_size_of=-1,
+    mask_object=True, max_size_hg=-1, max_size_of=-1,
     patch_size=2048, patch_stride=1536):
     """
     Aligns the view image to the reference view image using
     homography and optical flow. Optical flow is done using tiling method.
     """
     # Read and process the view image and UV map (cropped based on UV mask)
-    view_img = get_texture_area_image(view_img_path, uv_img_path, mask_object=mask_object)
+    view_img = get_texture_area_image(view_img_path, None, mask_object=mask_object)
 
     # Homography hard alignment
     try:
