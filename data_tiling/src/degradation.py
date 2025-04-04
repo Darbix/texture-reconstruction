@@ -15,15 +15,26 @@ def apply_strong_degradation(image):
     
     degraded_image = apply_blur(
         degraded_image, kernel_size=random.choice([7, 9, 11]))
-    degraded_image = apply_noise(
-        degraded_image, stddev=random.randint(5, 12))
+    
+    degraded_image = apply_motion_blur(
+        degraded_image, kernel_size=random.choice([0, 1, 3]))
+    
     dir = random.choice([(0, 1), (1, 0), (-1, 1), (1, -1), (-1, -1)])
     degraded_image = apply_chromatic_aberration(
         degraded_image, shift=random.randint(0, 5), dir_h=dir[0], dir_v=dir[1])
-    degraded_image = apply_motion_blur(
-        degraded_image, kernel_size=random.choice([0, 1, 3]))
+    
+    degraded_image = apply_shadow(degraded_image, num=random.randint(0, 2))
+    
+    degraded_image = apply_light_reflection(degraded_image,
+        num=random.randint(0, 2))
+    
     degraded_image, alpha_channel = apply_cfa(degraded_image)
+    
+    degraded_image = apply_noise(
+        degraded_image, stddev=random.randint(5, 12))
+    
     degraded_image = ahd_demosaic(degraded_image, alpha_channel=alpha_channel)
+    
     degraded_image = apply_jpeg_compression(
         degraded_image, quality=random.randint(25, 65))
     
@@ -42,16 +53,21 @@ def apply_light_degradation(image):
     """Applies small realistic degradation to an image"""
     degraded_image = image
 
-    degraded_image = apply_noise(
-        degraded_image, stddev=random.uniform(0, 1))
     dir = random.choice([(0, 1), (1, 0), (-1, 1), (1, -1), (-1, -1)])
     degraded_image = apply_chromatic_aberration(
         degraded_image, shift=random.randint(0, 3), dir_h=dir[0], dir_v=dir[1])
+    
     degraded_image, alpha_channel = apply_cfa(degraded_image)
+    
+    degraded_image = apply_noise(
+        degraded_image, stddev=random.uniform(0, 1))
+    
     degraded_image = ahd_demosaic(degraded_image, alpha_channel=alpha_channel)
+    
     degraded_image = apply_jpeg_compression(
         degraded_image, quality=random.randint(90, 100))
-    mean, stddev, max_shift = 0, 1.5, 5
+    
+    mean, stddev, max_shift = 0, 1.4, 5
     degraded_image = apply_displacement(
         degraded_image,
         dx=np.clip(np.random.normal(mean, stddev), -max_shift, max_shift),
@@ -84,7 +100,7 @@ def apply_blur(image, kernel_size=9):
 
 def apply_noise(image, mean=0, stddev=10):
     """Applies noise to an image as normal distributed values (excluding alpha channel)"""
-    if image.shape[2] == 4:
+    if(len(image.shape) > 2 and image.shape[2] == 4):
         rgb, alpha = image[:, :, :3], image[:, :, 3]
         noisy_rgb = np.clip(rgb + np.random.normal(mean, stddev, rgb.shape).astype(np.int16), 0, 255).astype(np.uint8)
         return np.dstack((noisy_rgb, alpha))
@@ -205,3 +221,57 @@ def apply_displacement(image, dx=0, dy=0):
         interpolation=cv2.INTER_LINEAR
     )
     return image
+
+
+def apply_shadow(image, num=2):
+    """Applies elliptical shadow blurred shapes"""
+    height, width, _ = image.shape
+    shadow_layer = np.zeros_like(image, dtype=np.uint8)
+
+    for _ in range(num):
+        # Random shadow color
+        shadow_color = [random.randint(40, 110)] * 3
+
+        # Random position and size
+        center = (random.randint(0, width), random.randint(0, height))
+        axes = (random.randint(0, int(width * 0.25)),  # Size 0-25% of the image
+                random.randint(0, int(height * 0.25))) # Size 0-25% of the image
+        angle = random.randint(0, 180)
+
+        # Draw filled ellipse for shadow
+        cv2.ellipse(shadow_layer, center, axes, angle, 0, 360, shadow_color, -1)
+
+    # Downscale, blur and upscale for fast processing
+    small_shadow = cv2.resize(shadow_layer, (width // 4, height // 4))
+    blurred_shadow = cv2.GaussianBlur(small_shadow, (61, 61), 130)
+    shadow_layer = cv2.resize(blurred_shadow, (width, height))
+
+    # Blend with the original image
+    return cv2.addWeighted(image, 1, shadow_layer, -0.5, 0)
+
+
+def apply_light_reflection(image, num=2):
+    """Applies elliptical light reflection blurred shapes"""
+    height, width, _ = image.shape
+    light_layer = np.zeros_like(image, dtype=np.uint8)
+
+    for _ in range(num):
+        # Random light reflection color
+        light_color = [random.randint(40, 170)] * 3
+
+        # Random position and size
+        center = (random.randint(0, width), random.randint(0, height))
+        axes = (random.randint(0, int(width * 0.15)),  # Size 0-15% of the image
+                random.randint(0, int(height * 0.15))) # Size 0-15% of the image
+        angle = random.randint(0, 180)
+
+        # Draw filled ellipse for light reflection
+        cv2.ellipse(light_layer, center, axes, angle, 0, 360, light_color, -1)
+
+    # Downscale, blur and upscale for fast processing
+    small_light = cv2.resize(light_layer, (width // 4, height // 4))
+    blurred_light = cv2.GaussianBlur(small_light, (21, 21), 25)
+    light_layer = cv2.resize(blurred_light, (width, height))
+
+    # Blend with the original image
+    return cv2.addWeighted(image, 1, light_layer, 0.5, 0)
