@@ -14,12 +14,12 @@ import torchvision.transforms as T
 
 from utils import load_patch_set, string_to_position
 import config
-
+n_patches
 
 class MultiViewDataset(Dataset):
     """Dataset loader with worker caching and parallelization"""
     def __init__(self, data_path, transform_patch=None, input_max_res=None,
-                 split_ratio=1, train=True):
+                 n_patches=-1, split_ratio=1, train=True):
 
         self.data_path = data_path
         self.transform_patch = transform_patch
