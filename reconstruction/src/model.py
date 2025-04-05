@@ -52,7 +52,6 @@ class MVTRN(nn.Module):
 
         return x
 
-
 class ResidualBlock(nn.Module):
     """Residual block"""
     def __init__(self, channels):
@@ -72,7 +71,7 @@ class ResidualBlock(nn.Module):
 
 
 class MVTRN_UNet(nn.Module):
-    """UNet architecture model for image enhancing"""
+    """UNet architecture model with ResNet34 backbone"""
     def __init__(self, num_views, backbone='resnet34', pretrained=True):
         super(MVTRN_UNet, self).__init__()
         self.num_views = num_views
@@ -166,115 +165,155 @@ class MVTRN_UNet_Separated(nn.Module):
 
 
 
-class SEBlock(nn.Module):
-    """Squeeze-and-Excitation (SE) block for channel-wise attention"""
-    def __init__(self, in_channels, reduction=4):
-        super(SEBlock, self).__init__()
-        # Adaptive pooling with output size (1, 1)
-        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            # Channel size reduction
-            nn.Linear(in_channels, in_channels // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(in_channels // reduction, in_channels, bias=False),
-            # Output attention weights between 0 and 1
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        B, C, _, _ = x.shape
-        # Global average pooling across height and width
-        se_weight = self.global_avg_pool(x).view(B, C)
-        # Attention vector reshaped to (B, C, 1, 1)
-        se_weight = self.fc(se_weight).view(B, C, 1, 1)
-        return x * se_weight
-
-
-class SelfAttentionBlock(nn.Module):
-    """Memory-efficient self-attention block with downsampling and upsampling"""
-    def __init__(self, in_channels, num_heads=2, scale_factor=2):
-        super(SelfAttentionBlock, self).__init__()
-
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.scale_factor = scale_factor
-
-        # Multi-Head Attention
-        self.attention = nn.MultiheadAttention(embed_dim=in_channels, num_heads=num_heads, batch_first=True)
-
-        # Feed-forward layers
-        self.fc1 = nn.Linear(in_channels, in_channels * 2)
-        self.fc2 = nn.Linear(in_channels * 2, in_channels)
-
-        # Upsampling to restore original size
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-
-        # Downsample using interpolation
-        H_reduced, W_reduced = H // self.scale_factor, W // self.scale_factor
-        x_down = F.interpolate(x, size=(H_reduced, W_reduced), mode='bilinear', align_corners=False)
-
-        # Reshape for self-attention
-        x_attn = x_down.view(B, C, -1).permute(0, 2, 1) # Shape: (B, H'W', C)
-
-        # Apply multi-head attention without mixed precision (no autocast)
-        attn_output, _ = self.attention(x_attn, x_attn, x_attn)
-
-        # Residual connection
-        attn_output = attn_output + x_attn
-        attn_output = self.fc2(F.relu(self.fc1(attn_output))) + attn_output # Ensure shape consistency
-
-        # Reshape back and upsample to original size
-        attn_output = attn_output.permute(0, 2, 1).view(B, C, H_reduced, W_reduced)
-        output = self.upsample(attn_output)
-
-        return output
-
-
-class MVTRN_UNet_Attention(nn.Module):
-    """UNet architecture with self-attention and spatial attention"""
-    def __init__(self, num_views, backbone='resnet34', pretrained=True):
-        super(MVTRN_UNet_Attention, self).__init__()
+class MVTRN_UNet_MiT(nn.Module):
+    """UNet architecture model with Mix Vision Transformer (MiT) backbone"""
+    def __init__(self, num_views, backbone='MiT_b2', pretrained=True):
+        super(MVTRN_UNet, self).__init__()
         self.num_views = num_views
-        in_channels = 3 * num_views  # Each view has 3 channels
         
-        # Add channel-wise attention (SE Block)
-        self.se_block = SEBlock(in_channels)
-
-        # Add self-attention block to enhance spatial attention
-        self.self_attention = SelfAttentionBlock(in_channels)
-        
-        # UNet with ResNet backbone
+        # segmentation_models_python UNet implementation
         self.unet = smp.Unet(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
-            in_channels=in_channels,
-            classes=3 # Output 3-channel image
+            in_channels=3 * num_views, # Input 3 channels per 1 view
+            classes=3                  # Output 3 channel image
         )
 
     def forward(self, x):
+        # Process a batch of patches (sets of view crops at the same position)
+        # B: batch size, N: number of views, C: channels, H: height, W: width
         B, N, C, H, W = x.shape
 
         # Merge view dimension with channels to represent input
         x = x.view(B, C * N, H, W)
 
-        # Apply SE block (channel-wise attention)
-        x = self.se_block(x)
-
-        # Apply self-attention to enhance spatial relationships
-        x = self.self_attention(x)
-
         # Ensure height and width are multiples of 32 by padding
         h_pad = (32 - (H % 32)) % 32
         w_pad = (32 - (W % 32)) % 32
-
         x = F.pad(x, (0, w_pad, 0, h_pad), mode='reflect')
-
+        
         x = self.unet(x)
-
-        # Remove the padding to restore original size
+        
+        # Remove the padding to restore the original size
         x = x[:, :, :H, :W]
-
+        
         return x
+
+
+
+
+class MVTRN_UNet_Attention(nn.Module):
+    """UNet with ResNet34 backbone and attention-based multi-view fusion"""
+    def __init__(self, num_views, backbone='resnet34', pretrained=True):
+        super().__init__()
+        self.num_views = num_views
+        # Number of output channels per processed view of individual encoders
+        view_enc_channels = 16
+
+        # Encoders for each view
+        self.view_encoders = nn.ModuleList(
+            [ViewEncoder(3, view_enc_channels) for _ in range(num_views)]
+        )
+
+        # Channel-wise fusion weighting
+        self.view_weighting = ChannelWiseViewWeighting(num_views, view_enc_channels)
+        # Spatial attention for input improvement
+        self.attn = nn.MultiheadAttention(
+            embed_dim=view_enc_channels * num_views, num_heads=1
+        )
+
+        # Upsampling 4x to match UNet resolution
+        self.upsample = nn.ConvTranspose2d(
+            view_enc_channels * num_views,
+            view_enc_channels * num_views,
+            kernel_size=8, stride=4, padding=2
+        )
+
+        # Reshape processed views (residuum) to match the original input
+        self.match_channels = nn.Conv2d(
+            view_enc_channels * num_views, 3 * num_views, kernel_size=1
+        )
+
+        # UNet backbone
+        self.unet = smp.Unet(
+            encoder_name=backbone,
+            encoder_weights='imagenet' if pretrained else None,
+            in_channels=3 * num_views,
+            classes=3
+        )
+
+    def forward(self, x):
+        # x: [B, N, C, H, W]
+        B, N, C, H, W = x.shape
+
+        # Encode each view separately
+        processed_views = [] # List of N views processed by individual encoders
+        for i in range(N):
+            view = x[:, i, :, :, :] # Extract i-th view [B, C, H, W]
+            view_encoded = self.view_encoders[i](view)
+            processed_views.append(view_encoded) # [B, C_enc, H_enc, W_enc]
+
+        # Fuse using channel-wise attention
+        weighted_views = self.view_weighting(processed_views) # [B, C_enc*N, H_enc, W_enc]
+
+        # Apply attention over flattened spatial dimensions
+        B, C_enc_N, H_enc, W_enc = weighted_views.shape
+        weighted_views = weighted_views.view(B, C_enc_N, -1).permute(2, 0, 1) # [H_enc*W_enc, B, C_enc_N]
+        
+        fused_views, _ = self.attn(weighted_views, weighted_views, weighted_views)
+        fused_views = fused_views.permute(1, 2, 0).view(B, C_enc_N, H_enc, W_enc) # [B, C_enc_N, H_enc, W_enc]
+
+        # Upsample and match [B, N*C, H, W]
+        fused_views = self.upsample(fused_views)
+        fused_residual = self.match_channels(fused_views)
+        x_flat = x.view(B, -1, H, W) # [B, N*C, H, W]
+
+        # Residual addition and final UNet processing
+        x_improved = x_flat + fused_residual
+        x_improved = self.unet(x_improved)
+
+        return x_improved
+
+class ChannelWiseViewWeighting(nn.Module):
+    """Channel-wise weighting fusion"""
+    def __init__(self, num_views, channels):
+        super().__init__()
+        self.num_views = num_views
+        self.attn_conv = nn.Sequential(
+            nn.Conv2d(channels * num_views, channels, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels * num_views, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, features):
+        # features: list of N tensors [B, C, H, W]
+        B, C, H, W = features[0].shape
+        x_cat = torch.cat(features, dim=1) # [B, N*C, H, W]
+        view_weights = self.attn_conv(x_cat).view(B, self.num_views, C, H, W) # [B, N, C, H, W]
+
+        weighted_views = torch.stack(
+            # Weight each view by n-th weight
+            [view_f * view_weights[:, n] for n, view_f in enumerate(features)],
+            dim=1) # [B, N, C, H, W]
+        return weighted_views.view(B, -1, H, W) # [B, N*C, H, W]
+
+class ViewEncoder(nn.Module):
+    """Individual encoder for each view image with inline pooling"""
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2), # 1st 2x downsampling
+
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2), # 2nd 2x downsampling
+
+            nn.Conv2d(16, out_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.encoder(x)

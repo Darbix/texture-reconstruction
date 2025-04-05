@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 from torchvision.models import vgg19
 
-from model import MVTRN, MVTRN_UNet, MVTRN_UNet_Separated, MVTRN_UNet_Attention
+from model import MVTRN, MVTRN_UNet, MVTRN_UNet_Separated, \
+    MVTRN_UNet_MiT, MVTRN_UNet_Attention
 import config
 
 
@@ -19,6 +20,9 @@ def setup_model(model_type, num_views=1):
     elif(model_type == config.ModelType.UNET_ATTENTION.value):
         print("MVTRN_UNET_ATTENTION")
         model = MVTRN_UNet_Attention(num_views=num_views)
+    elif(model_type == config.ModelType.UNET_MIT.value):
+        print("MVTRN_UNET_MIT")
+        model = MVTRN_UNet_MiT(num_views=num_views)
     elif(model_type == config.ModelType.DEFAULT.value):
         print("MVTRN_DEFAULT")
         model = MVTRN(num_views=num_views, upscale_factor=1)
