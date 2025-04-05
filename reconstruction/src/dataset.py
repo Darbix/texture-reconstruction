@@ -24,6 +24,7 @@ class MultiViewDataset(Dataset):
         self.data_path = data_path
         self.transform_patch = transform_patch
         self.input_max_res = input_max_res
+        self.n_patches = n_patches
 
         # Dataset initialization
         self.scene_dirs = sorted([d for d in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, d))])
