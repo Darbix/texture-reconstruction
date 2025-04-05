@@ -98,7 +98,7 @@ def plot_patches(path, b_lr_patches, b_hr_texture_patch, b_sr_img_patch):
         img = b_lr_patches.cpu().numpy().transpose(0, 2, 3, 1)[i]
         img = normalize_image(img)
         axes[i].imshow(img)
-        axes[i].set_title(f"Image {i+1}")
+        axes[i].set_title(f"View {i+1}")
 
     # Plot the texture patch
     img = b_hr_texture_patch.cpu().numpy().transpose(1, 2, 0)
@@ -113,7 +113,7 @@ def plot_patches(path, b_lr_patches, b_hr_texture_patch, b_sr_img_patch):
     axes[-1].set_title("Output")
 
     plt.tight_layout()
-    plt.savefig(path, dpi=150)
+    plt.savefig(path, dpi=200)
     plt.close()
 
 

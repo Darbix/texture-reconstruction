@@ -18,21 +18,15 @@ import config
 
 class MultiViewDataset(Dataset):
     """Dataset loader with worker caching and parallelization"""
-    def __init__(self, data_path,
-                 transform_patch=None,
-                 n_patches=-1, input_max_res=None,
-                 split_ratio=0.8, train=True):
+    def __init__(self, data_path, transform_patch=None, input_max_res=None,
+                 split_ratio=1, train=True):
 
-        # Other initialization
-        self.n_patches = n_patches
-        # self.s = s if s is not None else -1 # Debug limit the number of scenes
         self.data_path = data_path
         self.transform_patch = transform_patch
         self.input_max_res = input_max_res
 
+        # Dataset initialization
         self.scene_dirs = sorted([d for d in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, d))])
-        # self.scene_dirs = self.scene_dirs[:self.s] if self.s > 0 else self.scene_dirs
-        # Dataset split
         split_index = int(len(self.scene_dirs) * split_ratio)
         self.scene_dirs = self.scene_dirs[:split_index] if train else self.scene_dirs[split_index:]
         self.scene_paths = [os.path.join(data_path, d) for d in self.scene_dirs]

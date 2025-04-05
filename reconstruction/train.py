@@ -28,7 +28,8 @@ import config
 def parse_args():
     parser = argparse.ArgumentParser(description="Multi-View Texture Reconstruction Network training")
     # Paths
-    parser.add_argument('--data_path', type=str, required=True, help="Path to a dataset")
+    parser.add_argument('--data_train', type=str, required=True, help="Path to training data")
+    parser.add_argument('--data_val', type=str, required=True, help="Path to validation data")
     parser.add_argument('--output_dir', type=str,default=f"output_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}", help="Output directory")
     parser.add_argument('--checkpoint_path', type=str, default=None, help="Path to a checkpoint .pth file")
     # Training parameters
@@ -39,8 +40,6 @@ def parse_args():
     parser.add_argument('--learning_rate', type=float, default=0.000075, help="Learning rate")
     parser.add_argument('--num_epochs', type=int, default=1, help="Number of epochs")
     parser.add_argument('--num_workers', type=int, default=1, help="Number of workers")
-    # TODO remove?
-    parser.add_argument('--max_workers_loading', type=int, default=1, help="Number of workers for loading view images")
     # Other
     parser.add_argument('--model_type', type=str, required=False, help="'UNET' or 'DEFAULT' MVTRN")
     return parser.parse_args()
@@ -150,18 +149,19 @@ if __name__ == "__main__":
     os.makedirs(args.output_dir, exist_ok=True)
 
     # ----- Load train and val datasets -----
-    print("Loading data from:", args.data_path)
+    print("Loading training data from:", args.data_train)
     train_dataset = MultiViewDataset(
-        data_path=args.data_path, transform_patch=get_patch_transform(),
+        data_path=args.data_train, transform_patch=get_patch_transform(),
         n_patches=args.num_views,
-        input_max_res=args.input_resolution,
-        split_ratio=0.8, train=True)
+        input_max_res=args.input_resolution
+    )
 
+    print("Loading validation data from:", args.data_val)
     val_dataset = MultiViewDataset(
-        data_path=args.data_path, transform_patch=get_patch_transform(),
+        data_path=args.data_val, transform_patch=get_patch_transform(),
         n_patches=args.num_views,
-        input_max_res=args.input_resolution,
-        split_ratio=0.8, train=False)
+        input_max_res=args.input_resolution
+    )
 
     train_dataloader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     cnn_model.eval()
 
     # Enhance the test image loaded as patches from the test scene 
-    test_scene_path = os.path.join(args.data_path, "01d53fec-15e9-4dbd-8989-f11051caff25")
+    test_scene_path = os.path.join(args.data_train, "01d53fec-15e9-4dbd-8989-f11051caff25")
     output_image, view_image, texture_image = compose_sr_lr_hr(
         cnn_model, test_scene_path, args.num_views, max_size=5000)
 
