@@ -14,7 +14,7 @@ import torchvision.transforms as T
 
 from utils import load_patch_set, string_to_position
 import config
-n_patches
+
 
 class MultiViewDataset(Dataset):
     """Dataset loader with worker caching and parallelization"""
