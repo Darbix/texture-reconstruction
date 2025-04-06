@@ -49,16 +49,15 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_texture(texture_path, max_size=None):
+def load_texture(texture_path, max_size=-1):
     texture = cv2.imread(texture_path)
-    if(max_size):
+    if(max_size > 0):
         texture = resize_to_max_size(texture, max_size=max_size)
     return texture
 
 
 def compare_images(gt_texture, image, metric='PSNR'):
     """Compares uint8 images by a specific metric"""
-
     if(gt_texture.shape[:2] != image.shape[:2]):
         print(f"The image shapes do not match {gt_texture.shape[:2]} != {image.shape[:2]}",
             "These images cannot be compared.")

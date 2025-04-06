@@ -15,8 +15,9 @@ SCENE_INFO_DATA = "info.json"           # File with additional scene and patch d
 
 # MVTRN types of models
 class ModelType(Enum):
-    DEFAULT = 'DEFAULT'
     UNET = 'UNET'
-    UNET_SEPARATED = 'UNET_SEPARATED'
-    UNET_MIT = 'UNET_MIT'
+    UNETPLUSPLUS_MIT = 'UNETPLUSPLUS_MIT'
     UNET_ATTENTION = 'UNET_ATTENTION'
+    MVEDSR = 'MVEDSR'
+    EFFIC_MANET = 'EFFIC_MANET'
+    # EFFIC_LINKNET = 'EFFIC_LINKNET'

@@ -7,69 +7,6 @@ from torchvision.models import vgg19
 import segmentation_models_pytorch as smp
 
 
-class MVTRN(nn.Module):
-    """Multi-View Texture Reconstruction Network"""
-    def __init__(self, num_views, upscale_factor=1):
-        super(MVTRN, self).__init__()
-        self.num_views = num_views
-        self.upscale_factor = upscale_factor
-
-        # Shared feature extractor for all views
-        self.feature_extractor = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1), # RGB
-            nn.ReLU(inplace=True),
-            *[ResidualBlock(64) for _ in range(3)]
-        )
-
-        # Fusion layer
-        self.fusion = nn.Conv2d(num_views * 64, 64, kernel_size=3, stride=1, padding=1)
-
-        self.res_blocks = nn.Sequential(
-            *[ResidualBlock(64) for _ in range(5)]
-        )
-
-        self.upsample = nn.Sequential(
-            nn.Conv2d(64, 64 * (upscale_factor ** 2), kernel_size=3, stride=1, padding=1),
-            nn.PixelShuffle(upscale_factor),
-            nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1) # RGB
-        )
-
-    def forward(self, x):
-        B, N, C, H, W = x.shape
-
-        # Apply the feature extraction to each view independently (in parallel)
-        x = x.view(B * N, C, H, W)  # Merge batch and view dimensions
-        x = self.feature_extractor(x)
-        x = x.view(B, N * 64, H, W) # Restore a batch dimension and stack view features
-
-        x = self.fusion(x)
-
-        # Super-resolution part
-        residual = x
-        x = self.res_blocks(x)
-        x += residual
-        x = self.upsample(x)
-
-        return x
-
-class ResidualBlock(nn.Module):
-    """Residual block"""
-    def __init__(self, channels):
-        super(ResidualBlock, self).__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(channels),
-        )
-
-    def forward(self, x):
-        return x + self.block(x)
-
-
-
-
 class MVTRN_UNet(nn.Module):
     """UNet architecture model with ResNet34 backbone"""
     def __init__(self, num_views, backbone='resnet34', pretrained=True):
@@ -107,72 +44,14 @@ class MVTRN_UNet(nn.Module):
 
 
 
-class MVTRN_UNet_Separated(nn.Module):
-    """UNet-based model with per-view convolutional processing before fusion"""
-    def __init__(self, num_views, backbone='resnet34', pretrained=True):
-        super(MVTRN_UNet_Separated, self).__init__()
-        self.num_views = num_views
-        
-        # Feature extraction per view
-        self.view_extractors = nn.ModuleList([
-            nn.Sequential(
-                nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),  # Keep spatial size
-                nn.ReLU(),
-                nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),  # Output 64 channels per view
-                nn.ReLU()
-            ) for _ in range(num_views)
-        ])
-        
-        # UNet model (updated input channels to match feature extraction output)
-        self.unet = smp.Unet(
-            encoder_name=backbone,
-            encoder_weights='imagenet' if pretrained else None,
-            in_channels=32 * num_views, # Concatenated input channels
-            classes=3 # Output image channels
-        )
-
-    def forward(self, x):
-        # Process a batch of patches (sets of view crops at the same position)
-        # B: batch size, N: number of views, C: channels, H: height, W: width
-        B, N, C, H, W = x.shape
-
-        # Process each view separately through its own feature extractor
-        processed_views = []
-        for i in range(N):
-            # Extract i-th view of shape: (B, 3, H, W)
-            view = x[:, i]
-            processed_view = self.view_extractors[i](view) # (B, 64, H, W)
-            
-            # Ensure height and width are multiples of 32 for UNet compatibility
-            # Expects no size change in view_extractors
-            h_pad = (32 - (H % 32)) % 32
-            w_pad = (32 - (W % 32)) % 32
-            processed_view = F.pad(processed_view, (0, w_pad, 0, h_pad),
-                mode='reflect')
- 
-            processed_views.append(processed_view)
-
-        # Concatenate processed views along the channel dimension
-        x = torch.cat(processed_views, dim=1) # (B, 64 * N, H, W)
-
-        x = self.unet(x)
-
-        # Remove padding to restore original size
-        x = x[:, :, :H, :W]
-
-        return x
-
-
-
-
-class MVTRN_UNet_MiT(nn.Module):
-    """UNet architecture model with Mix Vision Transformer (MiT) backbone"""
-    def __init__(self, num_views, backbone='MiT_b2', pretrained=True):
-        super(MVTRN_UNet, self).__init__()
+class MVTRN_UNetPlusPlus_MiT(nn.Module):
+    """UNet++ architecture model with Mix Vision Transformer (MiT) backbone"""
+    def __init__(self, num_views, backbone='mit_b2', pretrained=True):
+        super(MVTRN_UNetPlusPlus_MiT, self).__init__()
         self.num_views = num_views
         
         # segmentation_models_python UNet implementation
-        self.unet = smp.Unet(
+        self.unet = smp.UnetPlusPlus(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
             in_channels=3 * num_views, # Input 3 channels per 1 view
@@ -208,7 +87,7 @@ class MVTRN_UNet_Attention(nn.Module):
         super().__init__()
         self.num_views = num_views
         # Number of output channels per processed view of individual encoders
-        view_enc_channels = 16
+        view_enc_channels = 8
 
         # Encoders for each view
         self.view_encoders = nn.ModuleList(
@@ -222,11 +101,22 @@ class MVTRN_UNet_Attention(nn.Module):
             embed_dim=view_enc_channels * num_views, num_heads=1
         )
 
-        # Upsampling 4x to match UNet resolution
-        self.upsample = nn.ConvTranspose2d(
-            view_enc_channels * num_views,
-            view_enc_channels * num_views,
-            kernel_size=8, stride=4, padding=2
+        # Gradually upsamples features 8x to match x input resolution to U-Net
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(
+                view_enc_channels * num_views, view_enc_channels * num_views,
+                kernel_size=4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+
+            nn.ConvTranspose2d(
+                view_enc_channels * num_views, view_enc_channels * num_views,
+                kernel_size=4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+
+            nn.ConvTranspose2d(
+                view_enc_channels * num_views, view_enc_channels * num_views,
+                kernel_size=4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
         )
 
         # Reshape processed views (residuum) to match the original input
@@ -303,17 +193,105 @@ class ViewEncoder(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, 8, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2), # 1st 2x downsampling
 
-            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.Conv2d(8, 16, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2), # 2nd 2x downsampling
 
-            nn.Conv2d(16, out_channels, kernel_size=3, padding=1),
+            nn.Conv2d(16, 8, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2), # 3rd 2x downsampling
+
+            nn.Conv2d(8, out_channels, kernel_size=3, padding=1),
             nn.ReLU(inplace=True)
         )
 
     def forward(self, x):
         return self.encoder(x)
+
+
+
+
+class MVTRN_EDSR(nn.Module):
+    """
+    Multi-view super-resolution model inspired by single-view EDSR architecture
+    for super-resolution (https://github.com/LimBee/NTIRE2017).
+    """
+    def __init__(self, num_views, num_residual_blocks=32, num_channels=64):
+        super(MVTRN_EDSR, self).__init__()
+
+        self.num_views = num_views
+
+        # Initial convolution to process multi-view input
+        self.initial_conv = nn.Conv2d(3 * num_views, num_channels, kernel_size=3, padding=1)
+
+        # Stack of residual blocks
+        self.residual_blocks = nn.ModuleList(
+            [ResidualBlock(num_channels) for _ in range(num_residual_blocks)]
+        )
+
+        # Final convolution layer
+        self.final_conv = nn.Conv2d(num_channels, 3, kernel_size=3, padding=1)  # Output 3 channels (RGB)
+
+    def forward(self, x):
+        # x: [B, N, C, H, W]
+        B, N, C, H, W = x.shape
+
+        # Merge the views with channels
+        x = x.view(B, C * N, H, W)
+
+        x = self.initial_conv(x)
+
+        # Pass through residual blocks
+        for block in self.residual_blocks:
+            x = block(x)
+
+        # Final convolution for RGB image reconstruction
+        x = self.final_conv(x)
+
+        return x
+
+class ResidualBlock(nn.Module):
+    """Residual block"""
+    def __init__(self, channels, kernel_size=3, padding=1):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size, padding=padding)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size, padding=padding)
+
+    def forward(self, x):
+        residual = x
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        return x + residual
+
+
+
+
+class MVTRN_EfficientNet_MANet(nn.Module):
+    """MAnet with EfficientNet backbone for multi-view reconstruction model"""
+    def __init__(self, num_views, backbone='efficientnet-b5', pretrained=True):
+        super(MVTRN_EfficientNet_MANet, self).__init__()
+        self.num_views = num_views
+        
+        self.manet = smp.MAnet(
+            encoder_name=backbone,
+            encoder_weights='imagenet' if pretrained else None,
+            in_channels=3 * num_views,
+            classes=3
+        )
+
+    def forward(self, x):
+        # x: [B, N, C, H, W]
+        B, N, C, H, W = x.shape
+
+        # Merge the views with channels
+        x = x.view(B, C * N, H, W)
+
+        x = self.manet(x)
+        
+        return x

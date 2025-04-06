@@ -20,7 +20,8 @@ from torch.utils.data import DataLoader
 
 from utils import plot_patches, load_img_patches, plot_random_val_patch, \
     compose_sr_lr_hr, get_patch_transform
-from model_utils import MSELoss, save_checkpoint, load_checkpoint, setup_model
+from model_utils import MSELoss, save_checkpoint, load_checkpoint, \
+    setup_model, model_to_device
 from dataset import MultiViewDataset
 import config
 
@@ -41,7 +42,7 @@ def parse_args():
     parser.add_argument('--num_epochs', type=int, default=1, help="Number of epochs")
     parser.add_argument('--num_workers', type=int, default=1, help="Number of workers")
     # Other
-    parser.add_argument('--model_type', type=str, required=False, help="'UNET' or 'DEFAULT' MVTRN")
+    parser.add_argument('--model_type', type=str, required=False, help="MVTRN model name")
     return parser.parse_args()
 
 
@@ -71,7 +72,7 @@ def train_mvtrn(
     
     """Train loop for the MVTRN model training"""
     
-    model = model.to(device)
+    model = model_to_device(model, device)
     criterion = criterion.to(device)
 
     start_time = time.time()

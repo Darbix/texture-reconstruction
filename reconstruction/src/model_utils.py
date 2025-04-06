@@ -4,29 +4,49 @@ import torch
 import torch.nn as nn
 from torchvision.models import vgg19
 
-from model import MVTRN, MVTRN_UNet, MVTRN_UNet_Separated, \
-    MVTRN_UNet_MiT, MVTRN_UNet_Attention
+from model import MVTRN_UNet, MVTRN_EDSR, MVTRN_EfficientNet_MANet, \
+    MVTRN_UNetPlusPlus_MiT, MVTRN_UNet_Attention
 import config
 
 
-def setup_model(model_type, num_views=1):
+def setup_model(model_type, num_views=6):
     model = None
     if(model_type == config.ModelType.UNET.value):
-        print("MVTRN_UNET")
+        print("MVTRN_UNet")
         model = MVTRN_UNet(num_views=num_views)
-    elif(model_type == config.ModelType.UNET_SEPARATED.value):
-        print("MVTRN_UNET_SEPARATED")
-        model = MVTRN_UNet_Separated(num_views=num_views)
     elif(model_type == config.ModelType.UNET_ATTENTION.value):
-        print("MVTRN_UNET_ATTENTION")
+        print("MVTRN_UNet_Attention")
         model = MVTRN_UNet_Attention(num_views=num_views)
-    elif(model_type == config.ModelType.UNET_MIT.value):
-        print("MVTRN_UNET_MIT")
-        model = MVTRN_UNet_MiT(num_views=num_views)
-    elif(model_type == config.ModelType.DEFAULT.value):
-        print("MVTRN_DEFAULT")
-        model = MVTRN(num_views=num_views, upscale_factor=1)
+    elif(model_type == config.ModelType.UNETPLUSPLUS_MIT.value):
+        print("MVTRN_UNetPlusPlus_MiT")
+        model = MVTRN_UNetPlusPlus_MiT(num_views=num_views)
+    elif(model_type == config.ModelType.MVEDSR.value):
+        print("MVTRN_EDSR")
+        model = MVTRN_EDSR(num_views=num_views)
+    elif(model_type == config.ModelType.EFFIC_MANET.value):
+        print("MVTRN_EfficientNet_MANet")
+        model = MVTRN_EfficientNet_MANet(num_views=num_views)
+    else:
+        print(f"Model {model_type} does not exist")
     return model
+
+
+def model_to_device(model, device=None):
+    if(device == 'cuda'):
+        if(torch.cuda.is_available()):
+            device_count = torch.cuda.device_count()
+            if device_count > 1:
+                device_ids = list(range(device_count))
+                # Automatically detect GPU device IDs
+                model = nn.DataParallel(model, device_ids=device_ids)
+                print(f"Using CUDA devices {device_ids}")
+            else:
+                print("Using CUDA device")
+            return model.to('cuda')
+        else:
+            print("CUDA is not available")
+    print("Using CPU")
+    return model.to('cpu')
 
 
 class PerceptualLoss(nn.Module):
