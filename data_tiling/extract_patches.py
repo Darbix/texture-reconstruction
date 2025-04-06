@@ -113,11 +113,13 @@ def crop_patches(crop_positions, img, patch_size, alpha_threshold, quality,
     for y, x in crop_positions:
         patch = crop_patch(img, x, y, patch_size)
 
-        # Check if the patch is transparent enough to skip
+        # Check if the patch is transparent enough (or almost black with mean
+        # pixel value under 5) to be skipped
         transparency_perc = get_transparency_perc(patch)
-        if transparency_perc >= alpha_threshold:
+        black_mean = patch[:, :, :3].mean()
+        if(transparency_perc >= alpha_threshold or black_mean < 5):
             print(f"Skipping patch at x: {x:4}, y: {y:4} due to transparency",
-                    "{:.2f}".format(transparency_perc))
+                  f"{transparency_perc:.2f}. Black level: {black_mean:.2f}")
             patch_count += 1
             continue
 
@@ -127,7 +129,6 @@ def crop_patches(crop_positions, img, patch_size, alpha_threshold, quality,
         new_path = os.path.join(new_dir, new_name)
 
         # Save as high-quality JPG
-        # patch.convert("RGB").save(new_path, "JPEG", quality=quality)
         cv2.imwrite(new_path, patch[:, :, :3], [cv2.IMWRITE_JPEG_QUALITY, quality])
 
         print(f"Saved patch: {new_path}")
