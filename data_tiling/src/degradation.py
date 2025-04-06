@@ -230,12 +230,12 @@ def apply_shadow(image, num=2):
 
     for _ in range(num):
         # Random shadow color
-        shadow_color = [random.randint(40, 110)] * 3
+        shadow_color = [random.randint(40, 130)] * 3
 
         # Random position and size
         center = (random.randint(0, width), random.randint(0, height))
-        axes = (random.randint(0, int(width * 0.25)),  # Size 0-25% of the image
-                random.randint(0, int(height * 0.25))) # Size 0-25% of the image
+        axes = (random.randint(0, int(width * 0.30)),  # Size 0-30% of the image
+                random.randint(0, int(height * 0.30))) # Size 0-30% of the image
         angle = random.randint(0, 180)
 
         # Draw filled ellipse for shadow
@@ -243,7 +243,7 @@ def apply_shadow(image, num=2):
 
     # Downscale, blur and upscale for fast processing
     small_shadow = cv2.resize(shadow_layer, (width // 4, height // 4))
-    blurred_shadow = cv2.GaussianBlur(small_shadow, (61, 61), 130)
+    blurred_shadow = cv2.GaussianBlur(small_shadow, (61, 61), 140)
     shadow_layer = cv2.resize(blurred_shadow, (width, height))
 
     # Blend with the original image
@@ -257,12 +257,12 @@ def apply_light_reflection(image, num=2):
 
     for _ in range(num):
         # Random light reflection color
-        light_color = [random.randint(40, 170)] * 3
+        light_color = [random.randint(40, 180)] * 3
 
         # Random position and size
         center = (random.randint(0, width), random.randint(0, height))
-        axes = (random.randint(0, int(width * 0.15)),  # Size 0-15% of the image
-                random.randint(0, int(height * 0.15))) # Size 0-15% of the image
+        axes = (random.randint(0, int(width * 0.20)),  # Size 0-20% of the image
+                random.randint(0, int(height * 0.20))) # Size 0-20% of the image
         angle = random.randint(0, 180)
 
         # Draw filled ellipse for light reflection
