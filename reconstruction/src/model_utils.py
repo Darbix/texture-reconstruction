@@ -5,7 +5,7 @@ import torch.nn as nn
 from torchvision.models import vgg19
 
 from model import MVTRN_UNet, MVTRN_EDSR, MVTRN_EfficientNet_MANet, \
-    MVTRN_UNetPlusPlus_MiT, MVTRN_UNet_Attention
+    MVTRN_UNet_MiT, MVTRN_UNet_Attention, MVTRN_UNetPlusPlus
 import config
 
 
@@ -14,12 +14,15 @@ def setup_model(model_type, num_views=6):
     if(model_type == config.ModelType.UNET.value):
         print("MVTRN_UNet")
         model = MVTRN_UNet(num_views=num_views)
+    elif(model_type == config.ModelType.UNETPLUSPLUS.value):
+        print("MVTRN_UNetPlusPlus")
+        model = MVTRN_UNetPlusPlus(num_views=num_views)
     elif(model_type == config.ModelType.UNET_ATTENTION.value):
         print("MVTRN_UNet_Attention")
         model = MVTRN_UNet_Attention(num_views=num_views)
-    elif(model_type == config.ModelType.UNETPLUSPLUS_MIT.value):
-        print("MVTRN_UNetPlusPlus_MiT")
-        model = MVTRN_UNetPlusPlus_MiT(num_views=num_views)
+    elif(model_type == config.ModelType.UNET_MIT.value):
+        print("MVTRN_UNet_MiT")
+        model = MVTRN_UNet_MiT(num_views=num_views)
     elif(model_type == config.ModelType.MVEDSR.value):
         print("MVTRN_EDSR")
         model = MVTRN_EDSR(num_views=num_views)

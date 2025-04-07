@@ -44,14 +44,49 @@ class MVTRN_UNet(nn.Module):
 
 
 
-class MVTRN_UNetPlusPlus_MiT(nn.Module):
-    """UNet++ architecture model with Mix Vision Transformer (MiT) backbone"""
-    def __init__(self, num_views, backbone='mit_b2', pretrained=True):
-        super(MVTRN_UNetPlusPlus_MiT, self).__init__()
+class MVTRN_UNetPlusPlus(nn.Module):
+    """UNet++ architecture model with ResNet50 backbone"""
+    def __init__(self, num_views, backbone='resnet50', pretrained=True):
+        super(MVTRN_UNetPlusPlus, self).__init__()
         self.num_views = num_views
         
-        # segmentation_models_python UNet implementation
         self.unet = smp.UnetPlusPlus(
+            encoder_name=backbone,
+            encoder_weights='imagenet' if pretrained else None,
+            in_channels=3 * num_views, # Input 3 channels per 1 view
+            classes=3                  # Output 3 channel image
+        )
+
+    def forward(self, x):
+        # Process a batch of patches (sets of view crops at the same position)
+        # B: batch size, N: number of views, C: channels, H: height, W: width
+        B, N, C, H, W = x.shape
+
+        # Merge view dimension with channels to represent input
+        x = x.view(B, C * N, H, W)
+
+        # Ensure height and width are multiples of 32 by padding
+        h_pad = (32 - (H % 32)) % 32
+        w_pad = (32 - (W % 32)) % 32
+        x = F.pad(x, (0, w_pad, 0, h_pad), mode='reflect')
+        
+        x = self.unet(x)
+        
+        # Remove the padding to restore the original size
+        x = x[:, :, :H, :W]
+        
+        return x
+
+
+
+
+class MVTRN_UNet_MiT(nn.Module):
+    """UNet architecture model with Mix Vision Transformer (MiT) backbone"""
+    def __init__(self, num_views, backbone='mit_b2', pretrained=True):
+        super(MVTRN_UNet_MiT, self).__init__()
+        self.num_views = num_views
+        
+        self.unet = smp.Unet(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
             in_channels=3 * num_views, # Input 3 channels per 1 view
