@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument('--learning_rate', type=float, default=0.000075, help="Learning rate")
     parser.add_argument('--num_epochs', type=int, default=1, help="Number of epochs")
     parser.add_argument('--num_workers', type=int, default=1, help="Number of workers")
-    parser.add_argument('--losss', type=str, default="MSE", help="MSE or Perceptual")
+    parser.add_argument('--loss', type=str, default="MSE", help="MSE or Perceptual")
     # Other
     parser.add_argument('--model_type', type=str, required=False, help="MVTRN model name")
     return parser.parse_args()

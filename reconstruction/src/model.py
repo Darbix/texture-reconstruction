@@ -343,7 +343,7 @@ class MVTRN_EfficientNet_MANet(nn.Module):
 class MVTRN_Segformer(nn.Module):
     """Modified Segformer for multi-view reconstruction"""
     def __init__(self, num_views, backbone='mit_b2', pretrained=True):
-        super(MVTRN_EfficientNet_MANet, self).__init__()
+        super(MVTRN_Segformer, self).__init__()
         self.num_views = num_views
         
         self.segformer = smp.Segformer(
