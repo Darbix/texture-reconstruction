@@ -17,6 +17,7 @@ class MVTRN_UNet(nn.Module):
         self.unet = smp.Unet(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
+            activation='tanh', # Converts output to the range [-1, 1]
             in_channels=3 * num_views, # Input 3 channels per 1 view
             classes=3                  # Output 3 channel image
         )
@@ -53,6 +54,7 @@ class MVTRN_UNetPlusPlus(nn.Module):
         self.unet = smp.UnetPlusPlus(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
+            activation='tanh', # Converts output to the range [-1, 1]
             in_channels=3 * num_views, # Input 3 channels per 1 view
             classes=3                  # Output 3 channel image
         )
@@ -163,6 +165,7 @@ class MVTRN_UNet_Attention(nn.Module):
         self.unet = smp.Unet(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
+            activation='tanh', # Converts output to the range [-1, 1]
             in_channels=3 * num_views,
             classes=3
         )
@@ -287,6 +290,8 @@ class MVTRN_EDSR(nn.Module):
         # Final convolution for RGB image reconstruction
         x = self.final_conv(x)
 
+        x = torch.tanh(x) # Converts output to the range [-1, 1]
+
         return x
 
 class ResidualBlock(nn.Module):
@@ -316,6 +321,7 @@ class MVTRN_EfficientNet_MANet(nn.Module):
         self.manet = smp.MAnet(
             encoder_name=backbone,
             encoder_weights='imagenet' if pretrained else None,
+            activation='tanh', # Converts output to the range [-1, 1]
             in_channels=3 * num_views,
             classes=3
         )
@@ -330,3 +336,31 @@ class MVTRN_EfficientNet_MANet(nn.Module):
         x = self.manet(x)
         
         return x
+
+
+
+
+class MVTRN_Segformer(nn.Module):
+    """Modified Segformer for multi-view reconstruction"""
+    def __init__(self, num_views, backbone='mit_b2', pretrained=True):
+        super(MVTRN_EfficientNet_MANet, self).__init__()
+        self.num_views = num_views
+        
+        self.segformer = smp.Segformer(
+            encoder_name=backbone,
+            encoder_weights='imagenet' if pretrained else None,
+            activation='tanh', # Converts output to the range [-1, 1]
+            in_channels=3 * num_views,
+            classes=3
+        )
+
+    def forward(self, x):
+        # x: [B, N, C, H, W]
+        B, N, C, H, W = x.shape
+
+        # Merge the views with channels
+        x = x.view(B, C * N, H, W)
+
+        y = self.segformer(x)
+
+        return y

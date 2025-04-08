@@ -5,7 +5,7 @@ import torch.nn as nn
 from torchvision.models import vgg19
 
 from model import MVTRN_UNet, MVTRN_EDSR, MVTRN_EfficientNet_MANet, \
-    MVTRN_UNet_MiT, MVTRN_UNet_Attention, MVTRN_UNetPlusPlus
+    MVTRN_UNet_MiT, MVTRN_UNet_Attention, MVTRN_UNetPlusPlus, MVTRN_Segformer
 import config
 
 
@@ -29,6 +29,9 @@ def setup_model(model_type, num_views=6):
     elif(model_type == config.ModelType.EFFIC_MANET.value):
         print("MVTRN_EfficientNet_MANet")
         model = MVTRN_EfficientNet_MANet(num_views=num_views)
+    elif(model_type == config.ModelType.SEGFORMER.value):
+        print("MVTRN_Segformer")
+        model = MVTRN_Segformer(num_views=num_views)
     else:
         print(f"Model {model_type} does not exist")
     return model
@@ -55,16 +58,30 @@ def model_to_device(model, device=None):
 class PerceptualLoss(nn.Module):
     """Perceptual loss function"""
     def __init__(self):
-        super(PerceptualLoss, self).__init__()
+        super().__init__()
         vgg = vgg19(pretrained=True).features
         self.feature_extractor = nn.Sequential(*list(vgg.children())[:36])
         for param in self.feature_extractor.parameters():
             param.requires_grad = False
+
         self.criterion = nn.MSELoss()
 
+        # Reshaped normalization parameters
+        self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+        self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+
     def forward(self, output, target):
+        # Normalize in compliance with ImageNet stats
+        output = (output + 1) / 2  # Convert [-1, 1] to [0, 1] range
+        target = (target + 1) / 2  # Convert [-1, 1] to [0, 1] range
+        output = (output - self.mean.to(output.device)) / self.std.to(output.device)
+        target = (target - self.mean.to(target.device)) / self.std.to(target.device)
+
+        # Extract features
         output_features = self.feature_extractor(output)
         target_features = self.feature_extractor(target)
+
+        # Compute perceptual loss
         return self.criterion(output_features, target_features)
 
 

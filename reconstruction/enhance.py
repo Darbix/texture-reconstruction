@@ -21,7 +21,6 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as T
 
-from model import MVTRN, MVTRN_UNet
 from model_utils import load_checkpoint, setup_model
 from utils import resize_to_max_size, plot_patches, get_patch_transform, \
     get_patch_weight_blend_mask, attach_patch_to_image, normalize_composed_image

@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 from utils import plot_patches, load_img_patches, plot_random_val_patch, \
     compose_sr_lr_hr, get_patch_transform
 from model_utils import MSELoss, save_checkpoint, load_checkpoint, \
-    setup_model, model_to_device
+    setup_model, model_to_device, PerceptualLoss
 from dataset import MultiViewDataset
 import config
 
@@ -41,6 +41,7 @@ def parse_args():
     parser.add_argument('--learning_rate', type=float, default=0.000075, help="Learning rate")
     parser.add_argument('--num_epochs', type=int, default=1, help="Number of epochs")
     parser.add_argument('--num_workers', type=int, default=1, help="Number of workers")
+    parser.add_argument('--losss', type=str, default="MSE", help="MSE or Perceptual")
     # Other
     parser.add_argument('--model_type', type=str, required=False, help="MVTRN model name")
     return parser.parse_args()
@@ -177,7 +178,7 @@ if __name__ == "__main__":
     model = setup_model(args.model_type, num_views=args.num_views)
 
     # criterion = PerceptualLoss()  # Perceptual loss for better visual quality
-    criterion = MSELoss()
+    criterion = MSELoss() if args.loss == 'MSE' else PerceptualLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     start_epoch = 0
