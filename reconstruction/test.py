@@ -27,10 +27,13 @@ from utils import resize_to_max_size, plot_patches, get_patch_transform, \
 import config
 
 
+TEST_IMGS_SUBDIR = 'color_imgs' # Subdir with images in each '--data_path' scene dir
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Enhance LR image using multi-views and a trained model")
     # Paths
-    parser.add_argument('--data_path', type=str, required=True, help="Path to the dataset for evaluation")
+    parser.add_argument('--data_path', type=str, required=False, help="Path to the dataset for evaluation")
+    parser.add_argument('--imgs_path', type=str, required=False, help="Path to the image views for enhancement")
     parser.add_argument('--checkpoint_path', type=str, required=True, help="Path to model checkpoint file")
     parser.add_argument('--output_path', type=str, required=True, help="Path to the output image")
     # Model attributes
@@ -82,18 +85,6 @@ def save_lr_ref_view_resized(image_shape, ref_image_path, output_path):
     # Load an RGB ref view image and resize to fit the specific max image size
     ref_image = load_image(ref_image_path, max(image_shape))[:, :, :3]
 
-    # pad_bottom = image_h - ref_image.shape[0]
-    # pad_right = image_w - ref_image.shape[1]
-    
-    # # Pad the image to be aligned with the specific image
-    # padded_ref_image = np.pad(
-    #     ref_image,
-    #     ((0, pad_bottom), (0, pad_right), (0, 0)),
-    #     mode='constant',
-    #     constant_values=0 # Black
-    # )
-
-    # plt.imsave(output_path, padded_ref_image)
     plt.imsave(output_path, ref_image)
     print(f"The output image saved to {output_path}")
 
@@ -270,26 +261,57 @@ if __name__ == "__main__":
         model, args.checkpoint_path, optimizer, device)
     model.eval()
 
-    # Enhance the image using the MVTRN model
-    image = enhance_image_multiview(model, args.data_path, args.output_path,
-        args.num_views, args.patch_size, args.patch_stride,
-        args.max_image_size, num_workers=args.num_workers,
-        alpha_threshold=args.alpha_threshold)
+    list_img_dirs = []    # List of paths to scene directories
+    list_gt_textures = [] # List of paths to GT textures
+    if args.imgs_path:
+        list_img_dirs = [args.imgs_path]
+        list_gt_textures = [args.gt_texture]
+    else:
+        for scene_dir in sorted(os.listdir(args.data_path)):
+            scene_path = os.path.join(args.data_path, scene_dir)
+            if os.path.isdir(scene_path):
+                # Get the path to images
+                list_img_dirs.append(os.path.join(scene_path, TEST_IMGS_SUBDIR))
+                # Get the path to the texture
+                for texture_name in os.listdir(scene_path):
+                    if texture_name.lower().endswith(('.jpg', '.png')):
+                        list_gt_textures.append(os.path.join(scene_path, texture_name))
+                        break
+    psnr_values = []
+    ssim_values = []
+    for imgs_dir_path, gt_texture_path in zip(list_img_dirs, list_gt_textures):
+        print(f"Processing images from {imgs_dir_path}")    
+        if(gt_texture_path):
+            print(f"Texture: {gt_texture_path}")
+        # Enhance the image using the MVTRN model
+        image = enhance_image_multiview(model, imgs_dir_path, args.output_path,
+            args.num_views, args.patch_size, args.patch_stride,
+            args.max_image_size, num_workers=args.num_workers,
+            alpha_threshold=args.alpha_threshold)
 
-    # Normalize the image from np.float32 to np.uint8
-    image = (np.clip(image, 0.0, 1.0) * 255).astype(np.uint8)
+        # Normalize the image from np.float32 to np.uint8
+        image = (np.clip(image, 0.0, 1.0) * 255).astype(np.uint8)
 
-    # If a path to a texture for comparison is given, compare image by metrics 
-    if(args.gt_texture):
-        gt_texture = load_texture(args.gt_texture, args.max_image_size)
-        value = compare_images(gt_texture, image, metric='PSNR')
-        print(f"PSNR value: {value:.5f} db")
-        value = compare_images(gt_texture, image, metric='SSIM')
-        print(f"SSIM value: {value:.5f}")
+        # If a path to a texture for comparison is given, compare image by metrics 
+        if(gt_texture_path):
+            gt_texture = load_texture(gt_texture_path, args.max_image_size)
+            psnr_value = compare_images(gt_texture, image, metric='PSNR')
+            psnr_values.append(psnr_value)
+            print(f"PSNR value: {psnr_value:.5f} db")
+            ssim_value = compare_images(gt_texture, image, metric='SSIM')
+            ssim_values.append(ssim_value)
+            print(f"SSIM value: {ssim_value:.5f}")
 
-    # Take the first view image file as the reference view and save too
-    file_name = sorted([f for f in os.listdir(args.data_path) if f.endswith(('.png', '.jpg', '.jpeg'))])[0]
-    save_lr_ref_view_resized(
-        image.shape[:2],
-        os.path.join(args.data_path, file_name),
-        os.path.join(os.path.dirname(args.output_path), "ref_view.jpg"))
+        # If the script is run as reconstruction (not testing), plot output
+        if(args.imgs_path):
+            # Take the first view image file as the reference view and save too
+            file_name = sorted([f for f in os.listdir(imgs_dir_path) if f.endswith(('.png', '.jpg', '.jpeg'))])[0]
+            save_lr_ref_view_resized(
+                image.shape[:2],
+                os.path.join(imgs_dir_path, file_name),
+                os.path.join(os.path.dirname(args.output_path), "ref_view.jpg"))
+    
+    # Print average total stats
+    if(len(psnr_values) > 1):
+        print(f"Average PSNR value: {sum(psnr_values) / len(psnr_values):.5f} db")
+        print(f"Average SSIM value: {sum(ssim_values) / len(ssim_values):.5f}")
