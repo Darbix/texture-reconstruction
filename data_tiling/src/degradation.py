@@ -23,10 +23,10 @@ def apply_strong_degradation(image):
     degraded_image = apply_chromatic_aberration(
         degraded_image, shift=random.randint(0, 5), dir_h=dir[0], dir_v=dir[1])
     
-    degraded_image = apply_shadow(degraded_image, num=random.randint(0, 2))
+    # degraded_image = apply_shadow(degraded_image, num=random.randint(0, 2))
     
-    degraded_image = apply_light_reflection(degraded_image,
-        num=random.randint(0, 2))
+    # degraded_image = apply_light_reflection(degraded_image,
+    #     num=random.randint(0, 2))
     
     degraded_image, alpha_channel = apply_cfa(degraded_image)
     
@@ -55,19 +55,19 @@ def apply_light_degradation(image):
 
     dir = random.choice([(0, 1), (1, 0), (-1, 1), (1, -1), (-1, -1)])
     degraded_image = apply_chromatic_aberration(
-        degraded_image, shift=random.randint(0, 3), dir_h=dir[0], dir_v=dir[1])
+        degraded_image, shift=random.randint(0, 2), dir_h=dir[0], dir_v=dir[1])
     
     degraded_image, alpha_channel = apply_cfa(degraded_image)
     
     degraded_image = apply_noise(
-        degraded_image, stddev=random.uniform(0, 1))
+        degraded_image, stddev=random.uniform(0, 0.6))
     
     degraded_image = ahd_demosaic(degraded_image, alpha_channel=alpha_channel)
     
     degraded_image = apply_jpeg_compression(
-        degraded_image, quality=random.randint(90, 100))
+        degraded_image, quality=random.randint(95, 100))
     
-    mean, stddev, max_shift = 0, 1.4, 5
+    mean, stddev, max_shift = 0, 1.2, 4
     degraded_image = apply_displacement(
         degraded_image,
         dx=np.clip(np.random.normal(mean, stddev), -max_shift, max_shift),

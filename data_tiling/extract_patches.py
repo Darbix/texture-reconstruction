@@ -69,8 +69,8 @@ def get_transparency_perc(patch):
     alpha_channel = patch[:, :, 3]  # Extract alpha channel
     transparent_pixels = np.sum(alpha_channel < 128)
     transparency_percentage = transparent_pixels / alpha_channel.size
-    print(f"Alpha channel range: {np.min(alpha_channel)} - {np.max(alpha_channel)},",
-          f"transparency: {transparency_percentage:.2}")
+    # print(f"Alpha channel range: {np.min(alpha_channel)} - {np.max(alpha_channel)},",
+    #       f"transparency: {transparency_percentage:.2}")
     return transparency_percentage
 
 
