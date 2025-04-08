@@ -135,7 +135,7 @@ if __name__ == "__main__":
                 print("Not enough files")
                 continue
 
-            for i, view_img_path in enumerate(files[VIEW_IMGS_DIR][1:], start=1):
+            for i, view_img_path in enumerate(files[VIEW_IMGS_DIR]):
                 print("Image: ", view_img_path)
 
                 aligned_img = align_image_hg_of_with_tiling(
