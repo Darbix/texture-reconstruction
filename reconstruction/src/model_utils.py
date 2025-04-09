@@ -101,13 +101,22 @@ class MSELoss(nn.Module):
 
 def load_checkpoint(model, checkpoint_path, optimizer, device):
     """Loads a checkpoint of a model"""
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
-
-    model.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    
+    state_dict = checkpoint['model_state_dict']
+    
+    # Remove 'module.' prefix if present (caused by DataParallel)
+    if list(state_dict.keys())[0].startswith('module.'):
+        print("Removing 'module.' prefix from state_dict keys")
+        state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+    
+    # Update the model's state dict
+    model.load_state_dict(state_dict)
+    # Load the rest
     epoch = checkpoint['epoch']
     loss_hist = checkpoint['loss_hist']
 
-    if(optimizer):
+    if optimizer:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         # Move optimizer internal states to the correct device
         for state in optimizer.state.values():

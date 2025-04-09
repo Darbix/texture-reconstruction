@@ -139,7 +139,7 @@ def get_transparency_perc(patch):
 @torch.no_grad
 def enhance_image_multiview(model, data_path, output_path, num_views,
     patch_size, patch_stride, max_image_size, transform_patch=None,
-    alpha_threshold=0.9, num_workers=1):
+    alpha_threshold=0.9, num_workers=1, device='cpu'):
     """
     Enhances a LR reference image using multi-view images from a given data
     directory. In the alphabetical sort of files, the first image is considered
@@ -216,8 +216,8 @@ def enhance_image_multiview(model, data_path, output_path, num_views,
                 )
 
             # Enhance the patch using the model
-            b_output_patch = model(torch.stack(patch_set).unsqueeze(0))
-            
+            b_output_patch = model(torch.stack(patch_set).unsqueeze(0).to(device))
+
             # Attach the enhanced patch to the output image
             output_image, weight_map = attach_patch_to_image(
                 output_image, weight_map, img_size=(3, img_height, img_width),
@@ -287,7 +287,7 @@ if __name__ == "__main__":
         image = enhance_image_multiview(model, imgs_dir_path, args.output_path,
             args.num_views, args.patch_size, args.patch_stride,
             args.max_image_size, num_workers=args.num_workers,
-            alpha_threshold=args.alpha_threshold)
+            alpha_threshold=args.alpha_threshold, device=device)
 
         # Normalize the image from np.float32 to np.uint8
         image = (np.clip(image, 0.0, 1.0) * 255).astype(np.uint8)
