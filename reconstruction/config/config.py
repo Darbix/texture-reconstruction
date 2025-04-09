@@ -17,8 +17,9 @@ SCENE_INFO_DATA = "info.json"           # File with additional scene and patch d
 class ModelType(Enum):
     UNET = 'UNET'
     UNET_MIT = 'UNET_MIT'
+    UNET_SWIN = 'UNET_SWIN'
     UNET_ATTENTION = 'UNET_ATTENTION'
     MVEDSR = 'MVEDSR'
+    SEGFORMER = 'SEGFORMER'
     EFFIC_MANET = 'EFFIC_MANET'
     UNETPLUSPLUS = 'UNETPLUSPLUS'
-    SEGFORMER = 'SEGFORMER'

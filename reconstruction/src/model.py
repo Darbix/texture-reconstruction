@@ -340,10 +340,10 @@ class MVTRN_EfficientNet_MANet(nn.Module):
 
 
 
-class MVTRN_Segformer(nn.Module):
-    """Modified Segformer for multi-view reconstruction"""
+class MVTRN_SegFormer(nn.Module):
+    """MiT & Segformer model for multi-view reconstruction"""
     def __init__(self, num_views, backbone='mit_b2', pretrained=True):
-        super(MVTRN_Segformer, self).__init__()
+        super(MVTRN_SegFormer, self).__init__()
         self.num_views = num_views
         
         self.segformer = smp.Segformer(
@@ -364,3 +364,36 @@ class MVTRN_Segformer(nn.Module):
         y = self.segformer(x)
 
         return y
+
+
+
+
+class MVTRN_UNet_Swin(nn.Module):
+    """Swin-V2 & U-Net model"""
+    def __init__(self, num_views, backbone='tu-swinv2_base_window16_256', pretrained=True):
+        super(MVTRN_UNet_Swin, self).__init__()
+        self.num_views = num_views
+        
+        self.swin_unet = smp.Unet(
+            encoder_name=backbone,
+            encoder_weights='imagenet' if pretrained else None,
+            activation='tanh', # Converts output to the range [-1, 1]
+            in_channels=3 * num_views,
+            classes=3
+        )
+
+    def forward(self, x):
+        # x: [B, N, C, H, W]
+        B, N, C, H, W = x.shape
+        
+        x = x.view(B, C * N, H, W)
+
+        # Resize input to (256, 256) for SwinV2 backbone
+        x_resized = F.interpolate(x, size=(256, 256), mode='bilinear', align_corners=False)
+
+        y = self.swin_unet(x_resized)
+
+        # Upsample the output back to original height and width
+        y_upsampled = F.interpolate(y, size=(H, W), mode='bilinear', align_corners=False)
+
+        return y_upsampled
