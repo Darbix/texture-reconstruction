@@ -5,7 +5,7 @@ import torch.nn as nn
 from torchvision.models import vgg19
 
 from model import MVTRN_UNet, MVTRN_EDSR, MVTRN_EfficientNet_MANet, \
-    MVTRN_UNet_MiT, MVTRN_UNet_Attention, MVTRN_UNetPlusPlus, MVTRN_Segformer, \
+    MVTRN_UNet_MiT, MVTRN_UNet_Attention, MVTRN_UNetPlusPlus, MVTRN_SegFormer, \
     MVTRN_UNet_Swin
 import config
 
@@ -31,8 +31,8 @@ def setup_model(model_type, num_views=6):
         print("MVTRN_EfficientNet_MANet")
         model = MVTRN_EfficientNet_MANet(num_views=num_views)
     elif(model_type == config.ModelType.SEGFORMER.value):
-        print("MVTRN_Segformer")
-        model = MVTRN_Segformer(num_views=num_views)
+        print("MVTRN_SegFormer")
+        model = MVTRN_SegFormer(num_views=num_views)
     elif(model_type == config.ModelType.MVTRN_UNet_Swin.value):
         print("MVTRN_UNet_Swin")
         model = MVTRN_UNet_Swin(num_views=num_views)
