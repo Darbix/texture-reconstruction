@@ -1,42 +1,66 @@
 # degradation.py
 
+import os
 import cv2
+import yaml
 import random
 import numpy as np
+
+CFG = {} # Configuration
+
+
+def set_cfg(config_path):
+    """Loads a YAML configuration file"""
+    global CFG
+
+    if(not config_path):
+        config_path = os.path.join(os.path.dirname(__file__),
+            "../config/degradation_config_default.yaml")
+    
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config file not found at: {config_path}")
+    
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+        print(f"Loading config from {os.path.abspath(config_path)}")
+
+    CFG = config
 
 
 def apply_strong_degradation(image):
     """Applies strong realistic degradation to an image"""
+    cfg = CFG['strong_degradation']
+
     degraded_image = image
 
     # Downsize image for processing
     degraded_image, original_size = downscale_image(
-        degraded_image, factor=random.uniform(2.0, 2.7))
+        degraded_image, factor=random.uniform(*cfg['downscale_factor']))
     
     degraded_image = apply_blur(
-        degraded_image, kernel_size=random.choice([7, 9, 11]))
+        degraded_image, kernel_size=random.choice(cfg['blur_kernel_size']))
     
     degraded_image = apply_motion_blur(
-        degraded_image, kernel_size=random.choice([0, 1, 3]))
+        degraded_image, kernel_size=random.choice(cfg['motion_blur_kernel_size']))
     
-    dir = random.choice([(0, 1), (1, 0), (-1, 1), (1, -1), (-1, -1)])
+    dir = random.choice(cfg['chromatic_aberration_direction'])
     degraded_image = apply_chromatic_aberration(
-        degraded_image, shift=random.randint(0, 5), dir_h=dir[0], dir_v=dir[1])
-    
+        degraded_image, shift=random.randint(*cfg['chromatic_aberration_shift']), 
+        dir_h=dir[0], dir_v=dir[1])
+
     # degraded_image = apply_shadow(degraded_image, num=random.randint(0, 2))
-    
-    # degraded_image = apply_light_reflection(degraded_image,
-    #     num=random.randint(0, 2))
-    
+
+    # degraded_image = apply_light_reflection(degraded_image, num=random.randint(0, 2))
+
     degraded_image, alpha_channel = apply_cfa(degraded_image)
     
     degraded_image = apply_noise(
-        degraded_image, stddev=random.randint(5, 12))
+        degraded_image, stddev=random.randint(*cfg['noise_stddev']))
     
     degraded_image = ahd_demosaic(degraded_image, alpha_channel=alpha_channel)
     
     degraded_image = apply_jpeg_compression(
-        degraded_image, quality=random.randint(25, 65))
+        degraded_image, quality=random.randint(*cfg['jpeg_quality']))
     
     # Upscale back to original size
     degraded_image = upscale_image(degraded_image, original_size)
@@ -51,23 +75,26 @@ def apply_strong_degradation(image):
 
 def apply_light_degradation(image):
     """Applies small realistic degradation to an image"""
+    cfg = CFG['light_degradation']
+
     degraded_image = image
 
     dir = random.choice([(0, 1), (1, 0), (-1, 1), (1, -1), (-1, -1)])
     degraded_image = apply_chromatic_aberration(
-        degraded_image, shift=random.randint(0, 2), dir_h=dir[0], dir_v=dir[1])
+        degraded_image, shift=random.randint(*cfg['chromatic_aberration_shift']), 
+        dir_h=dir[0], dir_v=dir[1])
     
     degraded_image, alpha_channel = apply_cfa(degraded_image)
     
     degraded_image = apply_noise(
-        degraded_image, stddev=random.uniform(0, 0.6))
+        degraded_image, stddev=random.uniform(*cfg['noise_stddev']))
     
     degraded_image = ahd_demosaic(degraded_image, alpha_channel=alpha_channel)
     
     degraded_image = apply_jpeg_compression(
-        degraded_image, quality=random.randint(95, 100))
+        degraded_image, quality=random.randint(*cfg['jpeg_quality']))
     
-    mean, stddev, max_shift = 0, 1.2, 4
+    mean, stddev, max_shift = cfg['displacement_mean'], cfg['displacement_stddev'], cfg['displacement_max_shift']
     degraded_image = apply_displacement(
         degraded_image,
         dx=np.clip(np.random.normal(mean, stddev), -max_shift, max_shift),
