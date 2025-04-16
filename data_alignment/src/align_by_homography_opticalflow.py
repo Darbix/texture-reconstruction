@@ -19,16 +19,17 @@ from concurrent.futures import ThreadPoolExecutor
 from image_utils import load_exr_to_array, find_bounding_box,\
     crop_image_to_bbox, resize_to_max_size, save_img
 
+USE_THREADS = False # Use threads for optical flow processing
+
 
 def align_image_hg_of_with_tiling(model, args, ref_view_img, view_img_path,
-    mask_object=True, max_size_hg=-1, max_size_of=-1,
-    patch_size=2048, patch_stride=1536):
+    max_size_hg=-1, max_size_of=-1, patch_size=2048, patch_stride=1536):
     """
     Aligns the view image to the reference view image using
     homography and optical flow. Optical flow is done using tiling method.
     """
-    # Read and process the view image and UV map (cropped based on UV mask)
-    view_img = get_texture_area_image(view_img_path, None, mask_object=mask_object)
+    # Load a view image
+    view_img = get_texture_area_image(view_img_path, None)
 
     # Homography hard alignment
     try:
@@ -84,7 +85,7 @@ def process_patch(y, x, ref_img_padded, tgt_img_padded, model, patch_size,
 
     # Skip processing if the patch has all values zeros
     if np.all(tgt_patch < 1e-6):
-        print(f"Patch y: {y}, x: {x} skipped due to zero values") 
+        # print(f"Patch y: {y}, x: {x} skipped due to zero values") 
         return (y, x, np.zeros_like(ref_patch))
 
     # Apply the optical flow model on a patch
@@ -115,21 +116,36 @@ def align_image_opticalflow_tiling(ref_img, tgt_img, model, max_size=-1,
     weight_map = np.zeros((tgt_img_padded.shape[0], tgt_img_padded.shape[1], 1),
         dtype=np.float32)
 
-    tasks = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    def update_image(y, x, aligned_tile):
+        """Auxiliary function"""
+        y_end = y + patch_size
+        x_end = x + patch_size
+        aligned_img[y:y_end, x:x_end, :] += aligned_tile * blend_mask
+        weight_map[y:y_end, x:x_end, :] += blend_mask
+
+    if USE_THREADS:
+        # Possible to constrain e.g. max_workers=4
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for y in range(0, padded_img_height - patch_size + 1, patch_stride):
+                for x in range(0, padded_img_width - patch_size + 1, patch_stride):
+                    futures.append(executor.submit(
+                        process_patch, y, x, 
+                        ref_img_padded, tgt_img_padded, model, patch_size, max_size
+                    ))
+                print(f"Patches at the row {y} processed")
+
+            for future in futures:
+                y, x, aligned_tile = future.result()
+                update_image(y, x, aligned_tile)
+    else:
         for y in range(0, padded_img_height - patch_size + 1, patch_stride):
             for x in range(0, padded_img_width - patch_size + 1, patch_stride):
-                tasks.append(executor.submit(process_patch, y, x, 
-                    ref_img_padded, tgt_img_padded, model, patch_size, max_size))
-
-        for future in tasks:
-            y, x, aligned_tile = future.result()
-            y_end = y + patch_size
-            x_end = x + patch_size
-            # Attach a patch to the composed image
-            aligned_img[y:y_end, x:x_end, :] += aligned_tile * blend_mask
-            # Add a blend mask to total sum of weights
-            weight_map[y:y_end, x:x_end, :] += blend_mask
+                y, x, aligned_tile = process_patch(
+                    y, x, ref_img_padded, tgt_img_padded, model, patch_size, max_size
+                )
+                update_image(y, x, aligned_tile)
+                print(f"Patches at the row {y} processed")
 
     # Normalize the output back to 0.0-1.0 using weights
     aligned_img = normalize_composed_image(aligned_img, weight_map)

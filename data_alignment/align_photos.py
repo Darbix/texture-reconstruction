@@ -13,8 +13,8 @@ from align_by_homography_opticalflow import init_opticalflow_model, \
     align_image_hg_of_with_tiling, get_ref_image
 
 
-# Argument parser
 def parse_arguments():
+    """Argument parser"""
     parser = argparse.ArgumentParser(description="Process input arguments.")
     parser.add_argument("--scene_path", type=str,
         help="Path to the input views")
@@ -27,22 +27,25 @@ def parse_arguments():
         help="Name of the optical flow model to use (default: sea_raft_s)")
     parser.add_argument("--ckpt_path", type=str, default="kitti",
         help="Path to the model checkpoint (default: kitti)")
-    parser.add_argument("--patch_size", type=int, default=3072,
+    parser.add_argument("--patch_size", type=int, default=1024,
         help="Size of a patch for optical flow")
-    parser.add_argument("--patch_stride", type=int, default=2048,
+    parser.add_argument("--patch_stride", type=int, default=512,
         help="Size of a patch stride for optical flow")
-    parser.add_argument("--max_size_hg", type=int, default=1024,
+    parser.add_argument("--max_size_hg", type=int, default=2048,
         help="Maximal side size of the input image for homography (in pixels)")
-    parser.add_argument("--max_size_of", type=int, default=512,
+    parser.add_argument("--max_size_of", type=int, default=1024,
         help="Maximal side size of the input image to the SEA-RAFT (in pixels)")
     parser.add_argument("--max_image_size", type=int, default=-1,
         help="Maximal side size of output images")
-
     return parser.parse_args()
 
 
-
-if __name__ == "__main__":
+def main():
+    """
+    Aligns images in a given directory to the first view in a specific
+    resolution using homography and a specified optical flow model. The optical
+    flow is done using tiling to keep the original image quality.
+    """
     # Parse arguments
     args = parse_arguments()
 
@@ -79,10 +82,9 @@ if __name__ == "__main__":
         
         # Align view by homography and optical flow
         aligned_img = align_image_hg_of_with_tiling(
-            model, args, ref_view_img, view_img_path, None,
-            mask_object=False, max_size_hg=args.max_size_hg, 
-            max_size_of=args.max_size_of, patch_size=args.patch_size, 
-            patch_stride=args.patch_stride)
+            model, args, ref_view_img, view_img_path,
+            max_size_hg=args.max_size_hg, max_size_of=args.max_size_of,
+            patch_size=args.patch_size, patch_stride=args.patch_stride)
 
         # Save the aligned view image
         output_img_path = os.path.join(
@@ -91,3 +93,7 @@ if __name__ == "__main__":
         save_img(aligned_img, output_img_path,
             compression_level=args.compression)
         print(f"Saved {output_img_path}")
+
+
+if __name__ == "__main__":
+    main()

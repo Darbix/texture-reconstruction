@@ -19,8 +19,9 @@ VIEW_IMGS_DIR = "color_imgs" # Name of a directory for view images
 UV_IMGS_DIR = "uv_imgs"      # Name of a directory for UV maps
 DATA_INFO_FILE = "data.txt"  # Name of a file with a source texture name
 
-# Argument parser
+
 def parse_arguments():
+    """Argument parser"""
     parser = argparse.ArgumentParser(description="Process input arguments.")
     parser.add_argument("--data_path", type=str,
         help="Path to the input dataset")
@@ -140,9 +141,8 @@ if __name__ == "__main__":
 
                 aligned_img = align_image_hg_of_with_tiling(
                     model, args, ref_view_img, view_img_path,
-                    mask_object=True, max_size_hg=args.max_size_hg, 
-                    max_size_of=args.max_size_of, patch_size=args.patch_size, 
-                    patch_stride=args.patch_stride)
+                    max_size_hg=args.max_size_hg, max_size_of=args.max_size_of,
+                    patch_size=args.patch_size, patch_stride=args.patch_stride)
 
                 output_img_path = os.path.join(
                     OUTPUT_PATH, scene, VIEW_IMGS_DIR,
