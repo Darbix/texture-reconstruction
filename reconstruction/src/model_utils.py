@@ -33,7 +33,7 @@ def setup_model(model_type, num_views=6):
     elif(model_type == config.ModelType.SEGFORMER.value):
         print("MVTRN_SegFormer")
         model = MVTRN_SegFormer(num_views=num_views)
-    elif(model_type == config.ModelType.MVTRN_UNet_Swin.value):
+    elif(model_type == config.ModelType.UNET_SWIN.value):
         print("MVTRN_UNet_Swin")
         model = MVTRN_UNet_Swin(num_views=num_views)
     else:

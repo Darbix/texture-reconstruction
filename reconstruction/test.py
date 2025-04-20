@@ -51,13 +51,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_texture(texture_path, max_size=-1):
-    texture = cv2.imread(texture_path)
-    if(max_size > 0):
-        texture = resize_to_max_size(texture, max_size=max_size)
-    return texture
-
-
 def compare_images(gt_texture, image, metric='PSNR'):
     """Compares uint8 images by a specific metric"""
     if(gt_texture.shape[:2] != image.shape[:2]):
@@ -92,9 +85,8 @@ def save_lr_ref_view_resized(image_shape, ref_image_path, output_path):
 def load_image(image_path, max_image_size):
     """Loads and processes (resizes) a single NumPy image from the path"""
     with Image.open(image_path) as img:
-        if(max_image_size > 0):
-            img = np.array(img)
-            img = resize_to_max_size(img, max_image_size)
+        img = np.array(img)
+        img = resize_to_max_size(img, max_image_size)
         return img
 
 
@@ -294,7 +286,10 @@ if __name__ == "__main__":
 
         # If a path to a texture for comparison is given, compare image by metrics 
         if(gt_texture_path):
-            gt_texture = load_texture(gt_texture_path, args.max_image_size)
+            gt_texture = load_image(gt_texture_path, args.max_image_size)
+            print("GT shape:", gt_texture.shape, gt_texture.dtype)
+            print("Output shape:", image.shape, image.dtype)
+            
             psnr_value = compare_images(gt_texture, image, metric='PSNR')
             psnr_values.append(psnr_value)
             print(f"PSNR value: {psnr_value:.5f} db")
