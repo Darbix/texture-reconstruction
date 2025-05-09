@@ -145,7 +145,7 @@ def align_image_opticalflow_tiling(ref_img, tgt_img, model, max_size=-1,
                     y, x, ref_img_padded, tgt_img_padded, model, patch_size, max_size
                 )
                 update_image(y, x, aligned_tile)
-                print(f"Patches at the row {y} processed")
+            print(f"Patches at the row {y} processed")
 
     # Normalize the output back to 0.0-1.0 using weights
     aligned_img = normalize_composed_image(aligned_img, weight_map)
