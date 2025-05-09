@@ -1,4 +1,4 @@
-# enhance.py
+# test.py
 
 import os
 import sys
@@ -85,6 +85,7 @@ def save_lr_ref_view_resized(image_shape, ref_image_path, output_path):
 def load_image(image_path, max_image_size):
     """Loads and processes (resizes) a single NumPy image from the path"""
     with Image.open(image_path) as img:
+        img = img.convert('RGB') # Removes possible alpha channel
         img = np.array(img)
         img = resize_to_max_size(img, max_image_size)
         return img

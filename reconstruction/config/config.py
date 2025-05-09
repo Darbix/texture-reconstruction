@@ -13,13 +13,10 @@ VIEW_PATCHES_DIR = "image_patches"      # Subdir with view patches
 REF_PATCHES_DIR = "reference_patches"   # Subdir with reference view patches
 SCENE_INFO_DATA = "info.json"           # File with additional scene and patch data
 
-# MVTRN types of models
 class ModelType(Enum):
-    UNET = 'UNET'
-    UNET_MIT = 'UNET_MIT'
-    UNET_SWIN = 'UNET_SWIN'
-    UNET_ATTENTION = 'UNET_ATTENTION'
-    MVEDSR = 'MVEDSR'
-    SEGFORMER = 'SEGFORMER'
-    EFFIC_MANET = 'EFFIC_MANET'
-    UNETPLUSPLUS = 'UNETPLUSPLUS'
+    RESNET34_UNET = 'RESNET34_UNET'
+    MITB4_UNET = 'MITB4_UNET'
+    WF_RESNET34_UNET = 'WF_RESNET34_UNET'
+    MV_EDSR = 'MV_EDSR'
+    RESNET101_UNETPLUSPLUS = 'RESNET101_UNETPLUSPLUS'
+    
