@@ -1,3 +1,5 @@
+# image_utils.py
+
 import os
 import cv2
 import shutil
@@ -5,6 +7,7 @@ import OpenEXR
 import numpy as np
 from glob import glob
 import matplotlib.pyplot as plt
+
 
 def load_data_iteratively(data_path, VIEW_IMGS_DIR, UV_IMGS_DIR, DATA_INFO_FILE,
     DATA_INFO_KEY):
@@ -102,6 +105,7 @@ def resize_to_max_size(image, max_size=-1, interpolation=cv2.INTER_AREA,
     if clip_range:
         image = np.clip(image, *clip_range)
     return image
+
 
 def plot_image(image):
     """Plot a numpy image"""

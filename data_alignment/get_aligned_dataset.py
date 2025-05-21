@@ -114,9 +114,9 @@ if __name__ == "__main__":
             ref_view_img = None
             if(len(files[VIEW_IMGS_DIR]) > 1):
                 # Reference top view
-                # The texture image (all views aligned to a GT texture)
+                # The texture image (all views are aligned to a GT texture)
                 ref_view_img_path = texture_img_path
-                # Or the first image in the directory
+                # Or the first image in a directory
                 # ref_view_img_path = files[VIEW_IMGS_DIR][0]
 
                 ref_view_img = get_ref_image(
@@ -128,10 +128,6 @@ if __name__ == "__main__":
                 output_img_path = os.path.join(
                     OUTPUT_PATH, scene, VIEW_IMGS_DIR,
                     os.path.basename(ref_view_img_path))
-                # No need to save the reference texture as a view
-                # save_img(ref_view_img, output_img_path,
-                #     compression_level=args.compression)
-                # print("Saved image:", output_img_path, ref_view_img.shape)
             else:
                 print("Not enough files")
                 continue
@@ -154,4 +150,3 @@ if __name__ == "__main__":
                 # Free up the memory
                 torch.cuda.empty_cache()
                 gc.collect()
-                # print_ram()

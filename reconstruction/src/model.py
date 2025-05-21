@@ -3,7 +3,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import vgg19
 import segmentation_models_pytorch as smp
 
 
@@ -45,7 +44,7 @@ class MVTRN_ResNet34_UNet(nn.Module):
 
 
 class MVTRN_MiTB4_UNet(nn.Module):
-    """MiTB4_U-Net model with Mix Vision Transformer (MiT) backbone"""
+    """MiTB4_U-Net model with Mix Vision Transformer (MiT) B4 backbone"""
     def __init__(self, num_views, backbone='mit_b4', pretrained=True):
         super(MVTRN_MiTB4_UNet, self).__init__()
         self.num_views = num_views

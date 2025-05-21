@@ -1,3 +1,5 @@
+# evaluate_views.py
+
 import os
 import cv2
 import argparse
@@ -8,18 +10,7 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ProcessPoolExecutor as Executor
 
-np.seterr(divide='ignore', invalid='ignore')
-
-
-def ssim_efficient(image1, image2, channel_axis=-1):
-    h, w = image1.shape[:2]
-    ssim_values = [
-        ssim(image1[:h//2, :w//2], image2[:h//2, :w//2], channel_axis=channel_axis),
-        ssim(image1[h//2:, :w//2], image2[h//2:, :w//2], channel_axis=channel_axis),
-        ssim(image1[:h//2, w//2:], image2[:h//2, w//2:], channel_axis=channel_axis),
-        ssim(image1[h//2:, w//2:], image2[h//2:, w//2:], channel_axis=channel_axis),
-    ]
-    return np.mean(ssim_values)
+np.seterr(divide='ignore', invalid='ignore') # Ignores edge PSNR values
 
 
 def extract_patches(image_np, patch_size, stride):
@@ -44,6 +35,7 @@ def extract_patches(image_np, patch_size, stride):
 
 
 def apply_color_transfer(source, target):
+    """Color transfer in LAB space for color harmonization"""
     source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
     target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
     
@@ -64,7 +56,7 @@ def apply_color_transfer(source, target):
 def compare_patch(args):
     texture_patch, img_patch, x, y, patch_size, patch_stride = args
     
-    # more than 20% of a patch is black (pixel level < 12) -> skip
+    # more than 60% of a patch is black (pixel level < 12) => skip
     if (cv2.cvtColor(img_patch, cv2.COLOR_BGR2GRAY) < 12).mean() > 0.60:
         return None  # Skip dark patches
 
@@ -151,6 +143,8 @@ def main(texture_path, images_dir, patch_size, patch_stride, output_dir):
     print(f"composed_image_ssim SSIM: {ssim(texture_img, composed_image_ssim, channel_axis=-1)}")
 
     if output_dir:
+        os.makedirs(output_dir, exist_ok=True) # Create the directory if it doesn't exist
+    
         current_date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         cv2.imwrite(os.path.join(output_dir, f'composed_image_psnr_{current_date}.jpg'),
                     cv2.cvtColor(composed_image_psnr, cv2.COLOR_RGB2BGR))

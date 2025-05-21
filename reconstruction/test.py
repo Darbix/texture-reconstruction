@@ -27,7 +27,7 @@ from utils import resize_to_max_size, plot_patches, get_patch_transform, \
 import config
 
 
-TEST_IMGS_SUBDIR = 'color_imgs' # Subdir with images in each '--data_path' scene dir
+TEST_IMGS_SUBDIR = 'color_imgs' # Subdir with images in each '--data_path' scene dir for group evaluation
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Enhance LR image using multi-views and a trained model")
@@ -79,7 +79,7 @@ def save_lr_ref_view_resized(image_shape, ref_image_path, output_path):
     ref_image = load_image(ref_image_path, max(image_shape))[:, :, :3]
 
     plt.imsave(output_path, ref_image)
-    print(f"The output image saved to {output_path}")
+    print(f"The reference image saved to {output_path}")
 
 
 def load_image(image_path, max_image_size):
@@ -225,14 +225,15 @@ def enhance_image_multiview(model, data_path, output_path, num_views,
     # Normalize the composed image and blend patches correctly
     image = normalize_composed_image(output_image, weight_map)
 
-    # Resize to not be larger than max_size
-    # image = resize_to_max_size(image, max_image_size)
-    # Cut out the padding
+    # Cut off the padding
     image = image[:orig_img_height, :orig_img_width, :]
 
     if(output_path):
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        output_dir = os.path.dirname(output_path)
+        if output_dir: # Only create if there is a directory part
+            os.makedirs(output_dir, exist_ok=True)
         plt.imsave(output_path, image)
+        print(f"The output enhanced image saved to {output_path}")
 
     return image
 
@@ -288,8 +289,8 @@ if __name__ == "__main__":
         # If a path to a texture for comparison is given, compare image by metrics 
         if(gt_texture_path):
             gt_texture = load_image(gt_texture_path, args.max_image_size)
-            print("GT shape:", gt_texture.shape, gt_texture.dtype)
-            print("Output shape:", image.shape, image.dtype)
+            print("GT texture shape:", gt_texture.shape, gt_texture.dtype)
+            print("Enhanced output shape:", image.shape, image.dtype)
             
             psnr_value = compare_images(gt_texture, image, metric='PSNR')
             psnr_values.append(psnr_value)

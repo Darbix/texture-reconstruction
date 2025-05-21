@@ -1,3 +1,5 @@
+# data_generation.py
+
 import bpy
 import os
 import math
@@ -7,24 +9,24 @@ import random
 import colorsys
 import numpy as np
 
+
 def set_camera_position_and_rotation(cam, view_item):
     """
-    Set the camera to a specific location and rotation
-    Args:
-        view_item: dictionary with items 'location' and 'rotation' per each view
+    Set camera position and rotation from a dictionary with 'location' and 'rotation' keys.
     """
     cam.location = view_item['location']
     cam.rotation_euler = Euler([math.radians(r) for r in view_item['rotation']], 'XYZ')
 
 
 def create_light(name, props, light_type='POINT', scene_prop_vals=None):
-    """Creates and sets a light object"""
+    """Create and set a light object."""
         
     light_data = bpy.data.lights.new(name, light_type)
     light_object = bpy.data.objects.new(name, light_data)
     
     # If the scene bias light values set, generate random values near those values
-    hue = np.clip(np.random.normal(loc=scene_prop_vals['HUE'], scale=0.05), props['HUE'][0], props['HUE'][1]) if scene_prop_vals else random.uniform(*props['HUE'])
+    hue = np.clip(np.random.normal(loc=scene_prop_vals['HUE'], scale=0.05), props['HUE'][0],
+        props['HUE'][1]) if scene_prop_vals else random.uniform(*props['HUE'])
     
     color_hsv = (
         hue,
@@ -65,7 +67,7 @@ def create_light(name, props, light_type='POINT', scene_prop_vals=None):
 
 
 def create_area_light(name, location, size, energy_range, shadow_filter_range):
-    """Creates an area light object"""
+    """Creates an area light object."""
     
     light_data = bpy.data.lights.new(name, 'AREA')
     light_object = bpy.data.objects.new(name, light_data)
@@ -81,7 +83,7 @@ def create_area_light(name, location, size, energy_range, shadow_filter_range):
 
 
 def adjust_material(nodes, props):
-    """Sets the material properties to nodes"""
+    """Sets the material properties to nodes."""
     # BSDF node
     bsdf_node = nodes.get("Principled BSDF")
     
@@ -102,7 +104,7 @@ def adjust_surface(nodes, props):
 
 
 def set_material_nodes(target_object, target_material_name):
-    """Creates a material to link image textures to it"""
+    """Creates a material to link image textures to it."""
     material = bpy.data.materials.new(name=target_material_name)
     material.use_nodes = True
 
@@ -138,8 +140,7 @@ def render_view(render_path):
 def create_crumpled_plane(obj_name="Crumpled_plane", size=(2, 2), location=(0, 0, 0),
         cuts_range=(2,12), crumple_factor=0.2, perc_deformed_range=(0.25, 0.75), dissolve_range=(0.0,1.0)):
     """
-    Creates a crumpled pad to act as an auxiliary surface
-
+    Creates a crumpled surface to act as an auxiliary surface
     Args:
         obj_name: Name of the object
         size: Size tuple in meters
@@ -314,7 +315,9 @@ def get_random_camera_location(radius, min_angle=0, max_angle=math.pi/3):
 
 
 def look_at(camera_obj, target):
-    """Rotates the camera so that it looks at the specific target point"""
+    """
+    Rotates the camera so that it looks at the specific target point
+    """
     # Compute the direction vector from the camera to the target
     direction = camera_obj.location - target
     
@@ -342,10 +345,9 @@ def save_meta_info(info_data_path, head_data, camera_info_list):
 
 def get_camera_info(camera, target, dec_places):
     """
-    Extract camera relative position and quaternion rotation info 
-    
-    Returns: Relative coordinates to the target origin and the quaternion rotation
-        [pos_x, pos_y, pos_z, rot_w, rot_x, rot_y, rot_z]
+    Extract camera relative position and quaternion rotation info. Returns
+    relative coordinates to the target origin and the quaternion rotation:
+    [pos_x, pos_y, pos_z, rot_w, rot_x, rot_y, rot_z]
     """
     # Get the camera's world location and rotation
     cam_loc = camera.matrix_world.to_translation()

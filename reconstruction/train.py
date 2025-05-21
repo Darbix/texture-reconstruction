@@ -203,27 +203,27 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(args.output_dir, 'loss.png'))
 
 
-    # ----- Test inference -----
-    # Load weights of a trained model
-    cnn_model = setup_model(args.model_type, num_views=args.num_views)
+    # # ----- Example: Test reconstruction -----
+    # # Load weights of a trained model
+    # cnn_model = setup_model(args.model_type, num_views=args.num_views)
     
-    optimizer = optim.Adam(cnn_model.parameters(), lr=args.learning_rate)
-    device = torch.device("cpu")
-    cnn_model, _, _, _ = load_checkpoint(
-        cnn_model,
-        os.path.join(args.output_dir, f"mvtrn_epoch_{start_epoch + args.num_epochs}.pth"),
-        optimizer, device
-    )
-    cnn_model.to(device)
-    cnn_model.eval()
+    # optimizer = optim.Adam(cnn_model.parameters(), lr=args.learning_rate)
+    # device = torch.device("cpu")
+    # cnn_model, _, _, _ = load_checkpoint(
+    #     cnn_model,
+    #     os.path.join(args.output_dir, f"mvtrn_epoch_{start_epoch + args.num_epochs}.pth"),
+    #     optimizer, device
+    # )
+    # cnn_model.to(device)
+    # cnn_model.eval()
 
-    # Enhance the test image loaded as patches from the test scene 
-    test_scene_path = os.path.join(args.data_train, "01d53fec-15e9-4dbd-8989-f11051caff25")
-    output_image, view_image, texture_image = compose_sr_lr_hr(
-        cnn_model, test_scene_path, args.num_views, max_size=5000)
+    # # Enhance the test image loaded as patches from the test scene 
+    # test_scene_path = os.path.join(args.data_val, "<scene_data_dir>")
+    # output_image, view_image, texture_image = compose_sr_lr_hr(
+    #     cnn_model, test_scene_path, args.num_views, max_size=5000)
 
-    output_names = ["plot_output_image.jpg", "plot_view_image.jpg", "plot_texture_image.jpg"]
-    plt.imsave(os.path.join(args.output_dir, output_names[0]), output_image)
-    plt.imsave(os.path.join(args.output_dir, output_names[1]), view_image)
-    plt.imsave(os.path.join(args.output_dir, output_names[2]), texture_image)
-    print(f"Output images saved to {', '.join(output_names)}")
+    # output_names = ["plot_output_image.jpg", "plot_view_image.jpg", "plot_texture_image.jpg"]
+    # plt.imsave(os.path.join(args.output_dir, output_names[0]), output_image)
+    # plt.imsave(os.path.join(args.output_dir, output_names[1]), view_image)
+    # plt.imsave(os.path.join(args.output_dir, output_names[2]), texture_image)
+    # print(f"Output images saved to {', '.join(output_names)}")

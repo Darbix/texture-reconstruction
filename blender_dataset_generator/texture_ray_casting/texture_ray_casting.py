@@ -1,3 +1,5 @@
+# texture_ray_casting.py
+
 import bpy
 from mathutils import Vector, Quaternion
 import numpy as np
@@ -7,8 +9,9 @@ import os
 
 def convert_local_to_texture(obj, face_index, local_coords, mesh):
     """
-    Converts local object's coordinates to UV texture coordinates for the specified face.
-    Weightens UV face by local_coords position in the vertex face square.  
+    Convert local object's coordinates to UV texture coordinates for the specified face.
+    Given a 3D point, it gets 3D and UV coordinates of the triangle’s corners, computes
+    barycentric weights of the point within the triangle and uses them to find the UVs of the point.
     """
     # Get the active UV layer
     uv_layer = mesh.uv_layers.active.data
@@ -17,18 +20,17 @@ def convert_local_to_texture(obj, face_index, local_coords, mesh):
     closest_poly = mesh.polygons[face_index]
     loop_indices = closest_poly.loop_indices
 
-    # Get the UV coordinates and vertex positions for the specified polygon (quad)
+    # Get the UV coordinates and vertex positions for the specified polygon
     uv_coords = [uv_layer[loop_idx].uv for loop_idx in loop_indices]
     vertex_positions = [mesh.vertices[vert_idx].co for vert_idx in closest_poly.vertices]
 
 
     def get_uv_from_triangle(v0, v1, v2, uv0, uv1, uv2):
         """Calculates UV coordinates from local coordinates using barycentric interpolation."""
-        
         # Vectors for the triangle
         v0_v1 = v1 - v0
         v0_v2 = v2 - v0
-        v0_p = local_coords - v0
+        v0_p = local_coords - v0 # Vector to the target point local_coords
         
         # Compute dot products
         d00 = v0_v1.dot(v0_v1)
@@ -40,7 +42,8 @@ def convert_local_to_texture(obj, face_index, local_coords, mesh):
         # Calculate the denominator
         denom = d00 * d11 - d01 * d01
         if denom == 0:
-            return None  # Collinear points
+            # Collinear points
+            return None  
 
         # Compute barycentric coordinates
         v = (d11 * d20 - d01 * d21) / denom
@@ -51,7 +54,7 @@ def convert_local_to_texture(obj, face_index, local_coords, mesh):
         if 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 and u + v <= 1.0:
             return (u * uv0 + v * uv1 + w * uv2)
 
-        # Limit the values to not return None (the point must be in the face triangle anyway) 
+        # Limit the values to not return None (the point must be in the triangle anyway) 
         v = max(0.0, min(1.0, v))
         w = max(0.0, min(1.0, w))
         u = max(0.0, min(1.0, u))
@@ -61,7 +64,7 @@ def convert_local_to_texture(obj, face_index, local_coords, mesh):
 
     # Calculate the UV point in the triangle face
     uv = get_uv_from_triangle(vertex_positions[0], vertex_positions[1], vertex_positions[2],
-                                uv_coords[0], uv_coords[1], uv_coords[2])
+                              uv_coords[0], uv_coords[1], uv_coords[2])
     return uv
 
 
@@ -95,13 +98,10 @@ def draw_point_in_local_space(target_object, location):
 
 def cast_rays_to_texture(cam, target_object, res_coef=1.0, flip_uv=False, visualize=False):
     """
-    Cast rays from the camera through the view plane pixels to the texture object
-    Args:
-        res_coef: Resolution coeficient 0.0 to 1.0.
-            Number of rays will be res_coef * resolution_x * resolution_y
-    Return:
-        outputs: 2D array of tuples with normalized camera pixels 
-            mapped to texture coords (cam_x, cam_y, uv_x, uv_y)
+    Cast rays from the camera through the view plane pixels to the texture object. The result
+    values (array of UV coordinates) can be interpolated if a small number of rays is used.
+    Number of rays will be res_coef * resolution_x * resolution_y. Returns a 2D array
+    of tuples (cam_x, cam_y, uv_x, uv_y) with normalized camera frame pixel locations.
     """
 
     # Get the camera plane frame
@@ -219,11 +219,8 @@ def export_outputs(file_path, outputs):
 
 def visualize_rays(values, cam):
     """
-    Visualize rays and hits
-    Args:
-        values: 2D matrix of hit points in the world space
+    Visualizes rays and hits for input 2D array of hit points (in the world space)
     """
-    
     # Create a new mesh for hit points and lines
     mesh = bpy.data.meshes.new(name='Rays_mesh')
     bm = bmesh.new()
@@ -258,7 +255,10 @@ def set_render_resolution(rx, ry):
 
 
 def upsample_ray_data(data_matrix, res_x, res_y, res_coef):
-    """Upsamples numpy array matrix to res_x * res_y size (the source has sizes res_coef * res_<x,y>)"""
+    """
+    Upsamples numpy array matrix to res_x * res_y size
+    (the source has sizes res_coef * res_<x,y>)
+    """
     # Convert z_vals to a numpy array for easier manipulation
     w, h = data_matrix.shape
 
@@ -278,7 +278,10 @@ def upsample_ray_data(data_matrix, res_x, res_y, res_coef):
 
 
 def setup_and_save_image(file_path, pixels, color_depth_bits_str):
-    """Set render properties and create image from pixels and save to a specific format given by file_path extension"""
+    """
+    Set render properties and create image from pixels
+    and save to a specific format given by file_path extension
+    """
     # Determine file extension and set image format
     _, file_extension = os.path.splitext(file_path)
     file_extension = file_extension.lower()
@@ -325,7 +328,9 @@ def setup_and_save_image(file_path, pixels, color_depth_bits_str):
 
 
 def get_uv_coords_map(coords_matrix, res_x, res_y, res_coef, file_path, color_depth=np.float32):
-    """Saves the UV map of the texture from coords_matrix and upsamples to res_x*res_y if res_coef < 1"""
+    """
+    Saves the UV map of the texture from coords_matrix and upsamples to res_x*res_y if res_coef < 1
+    """
     # Convert the ray data array to upsampled render size array
     coords_data = np.array(coords_matrix, dtype=object)
     upsampled_data = upsample_ray_data(coords_data, res_x, res_y, res_coef)

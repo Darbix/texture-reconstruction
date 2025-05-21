@@ -195,8 +195,7 @@ def apply_cfa(image):
 
 def ahd_demosaic(bayer_image, alpha_channel=None):
     """
-    Applies Adaptive Homogeneity-Directed interpolation for demosaicing
-    a Bayer-patterned image
+    Applies interpolation for demosaicing a Bayer-patterned image (AHD simulation)
     """
     # Interpolation of Bayer mosaic image
     demosaiced_image = cv2.cvtColor(bayer_image, cv2.COLOR_BAYER_BG2BGR)

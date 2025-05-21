@@ -8,7 +8,7 @@ from image_utils import load_exr_to_array, find_bounding_box,\
 
 
 def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=1.5):
-    """Aligns the input image using UV mapping"""
+    """Align the input image using UV mapping"""
     # Load the view image
     view_img = cv2.imread(view_img_path, cv2.IMREAD_UNCHANGED)
     # Load the UV image
@@ -27,13 +27,12 @@ def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=
     # might not be all corresponding mapping due to unbalanced surface density.
     # Factor resizes (interpolates) the UV map and the image to get more precise
     # mapping 'image pixel to texture pixel'. Then it's resized back to max_size
-    uv_upsample_factor = uv_upscale_factor
-    max_size_upsampled = int(max_size * uv_upsample_factor)
+    max_size_upsampled = int(max_size * uv_upscale_factor)
 
     view_img_resized = resize_to_max_size(
-        view_img_cropped, max_size=max_size_upsampled)
+        view_img_cropped, max_size=max_size_upsampled, interpolation=cv2.INTER_CUBIC)
     uv_img_resized = resize_to_max_size(
-        uv_img_cropped.astype(np.float32), max_size=max_size_upsampled)
+        uv_img_cropped.astype(np.float32), max_size=max_size_upsampled, interpolation=cv2.INTER_CUBIC)
 
     # Visualization of the cropped and resized UV map
     # plt.imshow((uv_img_resized * 255).astype(np.uint8))
@@ -43,7 +42,7 @@ def align_image_uv(texture_shape, view_img_path, uv_img_path, uv_upscale_factor=
                                      texture_h, texture_w)
     
     # Resize back to the texture size
-    if(uv_upsample_factor > 1.0):
+    if(uv_upscale_factor > 1.0):
         aligned_view_img = resize_to_max_size(aligned_view_img,
             max_size=max_size)
     

@@ -1,3 +1,5 @@
+# main.py
+
 from mathutils import Vector
 import numpy as np
 import importlib
@@ -15,7 +17,7 @@ import os
 # Absolute path to the project directory (can be set manually)
 abs_curr_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else os.getcwd()
 
-# Import and reload modules to update
+# Import and reload modules to update them when working in the GUI
 sys.path.insert(0, abs_curr_dir + '/scene_init')
 import scene_init
 importlib.reload(scene_init)
@@ -29,6 +31,7 @@ import data_generation
 importlib.reload(data_generation)
 
 
+# ----- Parameters set for realistic looking results ------
 # ----- Object names -----
 TARGET_OBJECT = 'Target_object'   # Target texture object plane name
 MAIN_CAMERA = 'Main_camera'       # Name of the main camera for rendering 
@@ -161,7 +164,7 @@ def generate_data(textures_dir, renders_dir, surfaces_dir, cam_name, target_name
         cyclic_texture_names = cyclic_texture_names[n_skip:n_skip + n_samples]
         
         surface_names = os.listdir(surfaces_dir)
-#        random.shuffle(surface_names)
+        # random.shuffle(surface_names)
         
         
         render_set = 0 # Identificator number for the particular data collection
@@ -450,7 +453,7 @@ def define_render():
         bpy.context.scene.render.engine = 'CYCLES'
         bpy.context.scene.cycles.samples = RENDER_SAMPLES
         # Blender preferences -> System -> CUDA
-        bpy.context.preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'  # Use 'OPTIX' for RTX GPUs, or 'OPENCL' for AMD GPUs
+        bpy.context.preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'
         bpy.context.scene.cycles.device = 'GPU'
         # Select the first GPU device
         device = bpy.context.preferences.addons['cycles'].preferences.devices[0]
@@ -488,9 +491,9 @@ if __name__ == "__main__":
 
     initialize_scene(surface_size=SURFACE_SIZE)
     
-    if not os.path.exists(RENDERS_DIR):
+    if(not os.path.exists(RENDERS_DIR)):
         os.makedirs(RENDERS_DIR, exist_ok=True)
-    if not os.path.exists(OBJ_DIR):
+    if(not os.path.exists(OBJ_DIR) and EXPORT_ONLY_OBJS):
         os.makedirs(OBJ_DIR, exist_ok=True)
         
     # Render settings

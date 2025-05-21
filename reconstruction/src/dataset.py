@@ -17,7 +17,7 @@ import config
 
 
 class MultiViewDataset(Dataset):
-    """Dataset loader with worker caching and parallelization"""
+    """Dataset loader for fetching multiple patches per item"""
     def __init__(self, data_path, transform_patch=None, input_max_res=None,
                  n_patches=-1, split_ratio=1, train=True):
 
