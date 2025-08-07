@@ -3,6 +3,9 @@ A deep learning-based pipeline for reconstructing high-resolution, seamless text
 
 This project is organized into separate subdirectories to clearly define each processing step. This modular structure allows users to utilize only the components they need. Accordingly, each subdirectory contains its own `requirements.txt` file with libraries relevant for a specific task.
 
+![Pipeline diagram](images/pipeline_diagram.png)
+
+
 ## Dataset generation
 Files for dataset generation are located in the `blender_dataset_generator` directory. To use this, you must have [Blender](https://www.blender.org/) installed on your system. On Ubuntu-based systems, this can be done using `sudo apt install blender`. Before the generation process, you need to:
 - Place your texture images in the `texture_images` directory.
@@ -13,6 +16,8 @@ Then navigate to `blender_dataset_generator` and run the following command to ge
 blender -b main.blend -P main.py [-- --n_samples <optional_number_of_samples_to_generate>]
 ```
 
+![Blender data generator](images/blender.png)
+
 
 ## Training pipeline
 - **Data alignment** - `data_alignment/`
@@ -20,7 +25,7 @@ blender -b main.blend -P main.py [-- --n_samples <optional_number_of_samples_to_
 - **Training & enhancement** - `reconstruction/`
 In each of these directories you have to install the specific packages using `python -m pip install -r requirements.txt` to use scripts belonging to that part.
 
-Each input scene (set of frames and other data) must be in a separated directory and must include:
+Each input scene (set of frames and other data) must be in a separate directory and must include:
 - `data.txt` file with the path to the original texture on the first line.
 - `color_imgs` directory containing the camera images taken.
 
@@ -81,6 +86,17 @@ The final reconstruction (enhancement) of the texture from aligned multi-view in
 ```
 python test.py --imgs_path <path_to_aligned_images> --gt_texture <path_to_gt_texture> --output_path <output_enhanced_image_path> --checkpoint_path <path_to_a_model_checkpoint> --num_views <number_of_views> --max_image_size <max_image_resolution> --patch_size <patch_size> --patch_stride <patch_stride> --num_workers <num_parallel_workers> --model_type <model_type>
 ```
+
+
+## Example enhancement results
+
+### Output images compared to the reference images 
+![Enhanced map](images/enhanced_map.png)
+![Enhanced poster](images/enhanced_poster.png)
+
+### Detail comparison of patches
+![Detail comparison of patches 1](images/detail_output1.png)
+![Detail comparison of patches 2](images/detail_output2.png)
 
 
 ## References
